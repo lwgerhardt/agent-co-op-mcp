@@ -51,6 +51,7 @@ agent-co-op routing show <project-id> [--phase plan|implement|verify|resume]
 # Publish, inspect, or clear handoff state
 agent-co-op handoff publish --objective "..." --phase implement --project <id> [--next-steps STEP ...]
 agent-co-op handoff status [--json]
+agent-co-op handoff history [--json] [--limit N] [--id ENTRY_ID]
 agent-co-op handoff clear
 
 # Manage project manifests
@@ -145,6 +146,7 @@ Add to `.vscode/mcp.json` (VS Code 1.99+):
 | `handoff_publish` | Write new handoff state files |
 | `handoff_clear` | Delete all handoff files |
 | `handoff_status` | JSON snapshot of current handoff state |
+| `handoff_history` | JSON list of archived handoff states |
 | `project_init` | Create project manifest and optional gitignore entries |
 | `project_show` | Show project manifest summary |
 | `routing_show` | Show routing config for a project and phase |
@@ -183,6 +185,7 @@ Written to `.agent-co-op/` in the **user's project directory** (not in this repo
 | `handoff-state.json` | Machine-readable state (phase, objective, next_steps) | Ignore (via `init`) |
 | `handoff.md` | Human-readable summary | Ignore (via `init`) |
 | `CURRENT_HANDOFF.md` | Published pickup file — paste into any IDE | Ignore (via `init`) |
+| `handoff-history/` | Archived prior handoff states (JSON + markdown) | Ignore (via `init`) |
 
 ---
 
@@ -216,6 +219,10 @@ agent-co-op pickup
 # 5. Check state without generating a full prompt
 agent-co-op handoff status
 
+# 5b. Review prior handoffs after republishing
+agent-co-op handoff history
+agent-co-op handoff history --limit 3 --json
+
 # 6. Implementation done — verify
 agent-co-op handoff publish \
   --objective "Verify JWT auth end-to-end" \
@@ -243,6 +250,7 @@ src/agent_co_op/
 tests/
   test_routing.py
   test_handoff.py
+  test_handoff_history.py
   test_handoff_status.py
   test_pickup.py
   test_projects.py

@@ -78,6 +78,7 @@ class TestInitWorkspace:
         assert result["gitignore_updated"] is True
         gitignore = (tmp_path / ".gitignore").read_text(encoding="utf-8")
         assert ".agent-co-op/handoff-state.json" in gitignore
+        assert ".agent-co-op/handoff-history/" in gitignore
         assert "# agent-co-op handoff state" in gitignore
 
     def test_skips_gitignore_when_disabled(self, tmp_path: Path) -> None:

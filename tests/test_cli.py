@@ -4,7 +4,13 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from agent_co_op.cli import build_parser, cmd_handoff_status, cmd_init, cmd_project_init
+from agent_co_op.cli import (
+    build_parser,
+    cmd_handoff_history,
+    cmd_handoff_status,
+    cmd_init,
+    cmd_project_init,
+)
 
 
 class TestCliParser:
@@ -24,6 +30,23 @@ class TestCliParser:
         assert args.command == "handoff"
         assert args.handoff_command == "status"
         assert args.json is True
+
+    def test_handoff_history_command(self) -> None:
+        parser = build_parser()
+        args = parser.parse_args(["handoff", "history", "--limit", "5", "--json"])
+        assert args.command == "handoff"
+        assert args.handoff_command == "history"
+        assert args.limit == 5
+        assert args.json is True
+        assert args.id is None
+
+    def test_handoff_history_show_command(self) -> None:
+        parser = build_parser()
+        args = parser.parse_args(
+            ["handoff", "history", "--id", "20260702T060000Z_plan"]
+        )
+        assert args.handoff_command == "history"
+        assert args.id == "20260702T060000Z_plan"
 
     def test_project_init_command(self) -> None:
         parser = build_parser()
@@ -73,6 +96,16 @@ class TestCliHandlers:
         assert cmd_handoff_status(args) == 0
         captured = capsys.readouterr()
         assert '"has_state": false' in captured.out
+
+    def test_handoff_history_json_without_entries(
+        self, tmp_path: Path, monkeypatch, capsys
+    ) -> None:
+        monkeypatch.chdir(tmp_path)
+        parser = build_parser()
+        args = parser.parse_args(["handoff", "history", "--json"])
+        assert cmd_handoff_history(args) == 0
+        captured = capsys.readouterr()
+        assert '"count": 0' in captured.out
 
     def test_project_init_creates_manifest(self, tmp_path: Path, monkeypatch) -> None:
         monkeypatch.chdir(tmp_path)
