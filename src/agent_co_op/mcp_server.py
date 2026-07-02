@@ -55,6 +55,18 @@ def handoff_status() -> str:
 
 
 @mcp.tool()
+def handoff_history(limit: int = 0, entry_id: str = "") -> str:
+    """Return archived handoff history as JSON."""
+    if entry_id:
+        entry = _handoff.read_history_entry(entry_id)
+        if entry is None:
+            return json.dumps({"error": f"No history entry found for {entry_id!r}."})
+        return json.dumps(entry, indent=2)
+    history_limit = limit if limit > 0 else None
+    return json.dumps(_handoff.handoff_history(limit=history_limit), indent=2)
+
+
+@mcp.tool()
 def project_show(project_id: str) -> str:
     """Show project manifest metadata and configured roles."""
     return json.dumps(_projects.project_summary(project_id), indent=2)

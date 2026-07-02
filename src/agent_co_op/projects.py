@@ -15,6 +15,7 @@ _GITIGNORE_ENTRIES = (
     f"{_HANDOFF_DIRNAME}/handoff-state.json",
     f"{_HANDOFF_DIRNAME}/handoff.md",
     f"{_HANDOFF_DIRNAME}/CURRENT_HANDOFF.md",
+    f"{_HANDOFF_DIRNAME}/handoff-history/",
 )
 
 

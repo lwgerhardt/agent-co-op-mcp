@@ -91,6 +91,48 @@ def cmd_handoff_status(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_handoff_history(args: argparse.Namespace) -> int:
+    limit = args.limit if args.limit and args.limit > 0 else None
+    if args.id:
+        entry = handoff.read_history_entry(args.id)
+        if entry is None:
+            print(f"No history entry found for {args.id!r}.", file=sys.stderr)
+            return 1
+        if args.json:
+            print(json.dumps(entry, indent=2))
+            return 0
+        state = entry["state"]
+        print(f"ID:        {entry['id']}")
+        print(f"Project:   {state.get('project_id', '(unknown)')}")
+        print(f"Phase:     {state.get('phase', '(unknown)')}")
+        print(f"Role:      {state.get('role', '(unknown)')}")
+        print(f"Published: {state.get('published_at', '(unknown)')}")
+        print(f"Objective: {state.get('objective', '(none)')}")
+        next_steps: list[str] = state.get("next_steps", [])
+        if next_steps:
+            print("Next steps:")
+            for step in next_steps:
+                print(f"  - {step}")
+        return 0
+
+    history = handoff.handoff_history(limit=limit)
+    if args.json:
+        print(json.dumps(history, indent=2))
+        return 0
+    if history["count"] == 0:
+        print("No handoff history found.")
+        return 1
+    for entry in history["entries"]:
+        published_at = entry.get("published_at", "(unknown)")
+        project_id = entry.get("project_id", "(unknown)")
+        phase = entry.get("phase", "(unknown)")
+        objective = entry.get("objective", "(none)")
+        print(
+            f"{entry['id']}\t{published_at}\t{project_id}\t{phase}\t{objective}"
+        )
+    return 0
+
+
 def cmd_project_show(args: argparse.Namespace) -> int:
     try:
         summary = projects.project_summary(args.project_id)
@@ -278,6 +320,27 @@ def build_parser() -> argparse.ArgumentParser:
         help="Print status as JSON instead of a human summary.",
     )
     p_hs.set_defaults(func=cmd_handoff_status)
+
+    p_hh = handoff_sub.add_parser(
+        "history", help="List or show archived handoff states."
+    )
+    p_hh.add_argument(
+        "--json",
+        action="store_true",
+        help="Print history as JSON instead of a human summary.",
+    )
+    p_hh.add_argument(
+        "--limit",
+        type=int,
+        metavar="N",
+        help="Return only the N most recent archived entries.",
+    )
+    p_hh.add_argument(
+        "--id",
+        metavar="ENTRY_ID",
+        help="Show a single archived entry by id.",
+    )
+    p_hh.set_defaults(func=cmd_handoff_history)
 
     # project
     p_project = sub.add_parser("project", help="Project manifest commands.")
