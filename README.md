@@ -167,6 +167,22 @@ Add to `.vscode/mcp.json` (VS Code 1.99+):
 
 ---
 
+## Agent skills
+
+The **agent-handoff** skill teaches agents when and how to resume, publish, verify, and
+clear handoff state. Identical skill content is installed for each IDE:
+
+| IDE | Skill path |
+|-----|------------|
+| Cursor | `.cursor/skills/agent-handoff/SKILL.md` |
+| GitHub Copilot (VS Code) | `.github/skills/agent-handoff/SKILL.md` |
+| Claude Code | `.claude/skills/agent-handoff/SKILL.md` |
+
+When copying agent-co-op into a consumer project, copy the skill folder(s) for the IDEs you
+use. See `docs/roadmap.md` for planned improvements.
+
+---
+
 ## Work modes
 
 Work modes describe **context and tool discipline** — how much context to load and which tools to use — independent of the underlying model.
@@ -285,6 +301,14 @@ examples/
   project.example.json
   handoff-state.example.json
   CURRENT_HANDOFF.example.md
+docs/
+  roadmap.md
+.cursor/skills/agent-handoff/
+  SKILL.md
+.github/skills/agent-handoff/
+  SKILL.md
+.claude/skills/agent-handoff/
+  SKILL.md
 ```
 
 ---
