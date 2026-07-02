@@ -71,16 +71,13 @@ Use `handoff_pickup` output as the session bootstrap when starting cold in a new
 3. Tell the human: branch name, suggested verifier prompt (`handoff_role_prompt --role verifier`).
 4. **Do not claim tests or CI passed** — that is the verifier's job.
 
-For LOA repos with a verification profile, also run the local publish-for-verifier script
-if present; agent-co-op does not manage verification queues.
-
 ---
 
 ## Workflow C — Verifier session
 
 1. `handoff_status` + read state; confirm phase is `implement` or `verify`.
 2. Confirm current git branch matches handoff next_steps / context.
-3. Run verification commands listed in next_steps (or project-specific queue if LOA).
+3. Run verification commands listed in next_steps.
 4. Reply with a short PASS/FAIL summary; cite report file paths for full logs.
 5. Remind the human of any open manual checks in context or next_steps.
 6. On PASS → suggest `handoff_publish --phase verify` or `handoff_clear` after merge.
@@ -99,8 +96,8 @@ if present; agent-co-op does not manage verification queues.
 
 ## Workflow E — Post-session efficiency
 
-1. If the repo has `review_claude_session.py`, run it for the project id.
-2. Update project manifest notes, bootstrap hints, or next publish context from findings.
+1. Review what was read, edited, and run during the session (transcripts stay local).
+2. Update project manifest notes or handoff context with paths worth indexing next time.
 3. Do not re-implement unless the user asks.
 
 ---
@@ -125,4 +122,4 @@ if present; agent-co-op does not manage verification queues.
 | `verify` | verifier | background | Run checks only |
 | `resume` | resume | background | Continue listed next_steps |
 
-See `docs/design-alignment.md` for LOA-specific paths and verification queue integration.
+See `docs/roadmap.md` for planned improvements (verification queue, richer state schema).

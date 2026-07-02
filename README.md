@@ -173,7 +173,7 @@ Add to `.vscode/mcp.json` (VS Code 1.99+):
 | `handoff://current` | Rendered `CURRENT_HANDOFF.md` |
 | `handoff://state` | Full `handoff-state.json` |
 
-See `docs/design-alignment.md` for mapping to the LOA handoff proposal and
+See `docs/roadmap.md` for improvement ideas and
 `.cursor/skills/agent-handoff/SKILL.md` for agent workflows.
 
 ---
@@ -297,7 +297,7 @@ examples/
   handoff-state.example.json
   CURRENT_HANDOFF.example.md
 docs/
-  design-alignment.md   # LOA proposal ↔ agent-co-op mapping
+  roadmap.md            # Improvement ideas and implementation phases
 .cursor/skills/agent-handoff/
   SKILL.md              # Resume / publish / verify workflows
 ```
