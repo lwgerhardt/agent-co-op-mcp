@@ -97,6 +97,13 @@ def handoff_history(limit: int = 0, entry_id: str = "") -> str:
 
 
 @mcp.tool()
+def handoff_restore(entry_id: str) -> str:
+    """Restore a prior handoff state from history as the current handoff."""
+    state = _handoff.restore(entry_id)
+    return json.dumps(state, indent=2)
+
+
+@mcp.tool()
 def project_show(project_id: str) -> str:
     """Show project manifest metadata and configured roles."""
     return json.dumps(_projects.project_summary(project_id), indent=2)

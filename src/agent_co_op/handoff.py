@@ -162,6 +162,68 @@ def handoff_history(
     return {"count": len(entries), "entries": entries}
 
 
+def restore(entry_id: str, base: Path | None = None) -> dict[str, Any]:
+    """Restore a prior handoff state from history as the current handoff.
+
+    Archives the current state first when one exists. The history entry
+    itself is left in place. Raises FileNotFoundError when the entry is
+    missing and ValueError when the archived state is invalid.
+    """
+    from .routing import phase_to_role, resolve_routing
+
+    entry = read_history_entry(entry_id, base=base)
+    if entry is None:
+        raise FileNotFoundError(
+            f"No history entry found for {entry_id!r}. "
+            "Run 'agent-co-op handoff history' to list ids."
+        )
+
+    raw_state = entry["state"]
+    for field in ("phase", "objective", "project_id"):
+        value = raw_state.get(field)
+        if not isinstance(value, str) or not value.strip():
+            raise ValueError(
+                f"History entry {entry_id!r} is missing required field {field!r}."
+            )
+
+    _archive_current_state(base)
+
+    phase = raw_state["phase"]
+    project_id = raw_state["project_id"]
+    role = phase_to_role(phase)
+    routing = resolve_routing(role, phase=phase, project_id=project_id, base=base)
+
+    next_steps_raw = raw_state.get("next_steps", [])
+    next_steps: list[str] = (
+        list(next_steps_raw) if isinstance(next_steps_raw, list) else []
+    )
+
+    now = datetime.now(timezone.utc).isoformat()
+    published_at = raw_state.get("published_at")
+    if not isinstance(published_at, str) or not published_at:
+        published_at = now
+
+    state: dict[str, Any] = {
+        "phase": phase,
+        "objective": raw_state["objective"],
+        "project_id": project_id,
+        "role": role,
+        "work_mode": routing["work_mode"],
+        "next_steps": next_steps,
+        "published_at": published_at,
+        "updated_at": now,
+        "restored_at": now,
+        "restored_from_history_id": entry_id,
+    }
+
+    context = raw_state.get("context")
+    if isinstance(context, str) and context.strip():
+        state["context"] = context.strip()
+
+    _write_handoff_files(state, base=base)
+    return state
+
+
 def publish(
     objective: str,
     phase: str,
@@ -323,6 +385,9 @@ def _render_handoff_md(state: dict[str, Any], routing: dict[str, Any]) -> str:
     updated_at = state.get("updated_at")
     if updated_at and updated_at != state.get("published_at"):
         lines.append(f"*Updated at {updated_at}*")
+    restored_at = state.get("restored_at")
+    if isinstance(restored_at, str) and restored_at:
+        lines.append(f"*Restored at {restored_at}*")
     return "\n".join(lines) + "\n"
 
 

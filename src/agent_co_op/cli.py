@@ -135,6 +135,26 @@ def cmd_handoff_status(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_handoff_restore(args: argparse.Namespace) -> int:
+    try:
+        state = handoff.restore(args.id)
+    except FileNotFoundError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 1
+    except ValueError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 1
+
+    if args.json:
+        print(json.dumps(state, indent=2))
+    else:
+        print(
+            f"Handoff restored from {args.id} "
+            f"for {state['project_id']} / {state['phase']}."
+        )
+    return 0
+
+
 def cmd_handoff_history(args: argparse.Namespace) -> int:
     limit = args.limit if args.limit and args.limit > 0 else None
     if args.id:
@@ -433,6 +453,23 @@ def build_parser() -> argparse.ArgumentParser:
         help="Show a single archived entry by id.",
     )
     p_hh.set_defaults(func=cmd_handoff_history)
+
+    p_hr = handoff_sub.add_parser(
+        "restore", help="Restore a prior handoff state from history."
+    )
+    p_hr.add_argument(
+        "--id",
+        required=True,
+        metavar="ENTRY_ID",
+        dest="id",
+        help="Archived entry id from 'agent-co-op handoff history'.",
+    )
+    p_hr.add_argument(
+        "--json",
+        action="store_true",
+        help="Print the restored handoff state as JSON.",
+    )
+    p_hr.set_defaults(func=cmd_handoff_restore)
 
     # project
     p_project = sub.add_parser("project", help="Project manifest commands.")

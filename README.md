@@ -53,6 +53,7 @@ agent-co-op handoff publish --objective "..." --phase implement --project <id> [
 agent-co-op handoff update [--objective TEXT] [--phase plan|implement|verify|resume] [--next-steps STEP ...] [--append-next-steps STEP ...] [--context TEXT] [--clear-context] [--clear-next-steps] [--json]
 agent-co-op handoff status [--json]
 agent-co-op handoff history [--json] [--limit N] [--id ENTRY_ID]
+agent-co-op handoff restore --id ENTRY_ID [--json]
 agent-co-op handoff clear
 
 # Manage project manifests
@@ -158,6 +159,7 @@ Add to `.vscode/mcp.json` (VS Code 1.99+):
 | `handoff_clear` | Delete all handoff files |
 | `handoff_status` | JSON snapshot of current handoff state |
 | `handoff_history` | JSON list of archived handoff states |
+| `handoff_restore` | Restore a prior handoff state from history as the current handoff |
 | `project_init` | Create project manifest and optional gitignore entries |
 | `project_validate` | Validate a project manifest and return a JSON report |
 | `project_show` | Show project manifest summary |
@@ -239,6 +241,9 @@ agent-co-op handoff update --context "JWT middleware merged; refresh flow still 
 agent-co-op handoff history
 agent-co-op handoff history --limit 3 --json
 
+# 5d. Roll back to a prior handoff without losing the current state
+agent-co-op handoff restore --id 20260702T060000Z_plan
+
 # 6. Implementation done — verify
 agent-co-op handoff publish \
   --objective "Verify JWT auth end-to-end" \
@@ -269,6 +274,7 @@ tests/
   test_routing.py
   test_handoff.py
   test_handoff_history.py
+  test_handoff_restore.py
   test_handoff_status.py
   test_handoff_update.py
   test_pickup.py
