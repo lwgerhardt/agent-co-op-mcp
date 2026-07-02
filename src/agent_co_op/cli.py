@@ -54,13 +54,54 @@ def cmd_handoff_publish(args: argparse.Namespace) -> int:
     steps: list[str] = args.next_steps or []
     try:
         handoff.publish(
-            args.objective, args.phase, args.project, next_steps=steps or None
+            args.objective,
+            args.phase,
+            args.project,
+            next_steps=steps or None,
+            context=args.context,
         )
         print(f"Handoff published for {args.project} / {args.phase}.")
         return 0
     except (ValueError, OSError) as exc:
         print(f"Error: {exc}", file=sys.stderr)
         return 1
+
+
+def cmd_handoff_update(args: argparse.Namespace) -> int:
+    if hasattr(args, "next_steps") and hasattr(args, "append_next_steps"):
+        print(
+            "Error: specify either --next-steps or --append-next-steps, not both.",
+            file=sys.stderr,
+        )
+        return 2
+
+    try:
+        state = handoff.update(
+            objective=args.objective,
+            phase=args.phase,
+            next_steps=args.next_steps if hasattr(args, "next_steps") else None,
+            append_next_steps=(
+                args.append_next_steps if hasattr(args, "append_next_steps") else None
+            ),
+            context=args.context,
+            clear_context=args.clear_context,
+            clear_next_steps=args.clear_next_steps,
+        )
+    except handoff.HandoffUpdateError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 2
+    except FileNotFoundError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 1
+    except ValueError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 1
+
+    if args.json:
+        print(json.dumps(state, indent=2))
+    else:
+        print(f"Handoff updated for {state['project_id']} / {state['phase']}.")
+    return 0
 
 
 def cmd_handoff_clear(args: argparse.Namespace) -> int:
@@ -83,6 +124,9 @@ def cmd_handoff_status(args: argparse.Namespace) -> int:
     print(f"Phase:    {state.get('phase', '(unknown)')}")
     print(f"Role:     {state.get('role', '(unknown)')}")
     print(f"Objective: {state.get('objective', '(none)')}")
+    handoff_context = state.get("context")
+    if isinstance(handoff_context, str) and handoff_context.strip():
+        print(f"Context: {handoff_context.strip()}")
     next_steps: list[str] = state.get("next_steps", [])
     if next_steps:
         print("Next steps:")
@@ -308,7 +352,55 @@ def build_parser() -> argparse.ArgumentParser:
         metavar="STEP",
         help="One or more next steps.",
     )
+    p_hp.add_argument(
+        "--context",
+        help="Optional decisions, blockers, or background context.",
+    )
     p_hp.set_defaults(func=cmd_handoff_publish)
+
+    p_hu = handoff_sub.add_parser(
+        "update", help="Patch the current handoff state without republishing."
+    )
+    p_hu.add_argument("--objective", help="Replace the session objective.")
+    p_hu.add_argument(
+        "--phase",
+        choices=sorted(VALID_PHASES),
+        help="Replace the current phase and recompute role/work mode.",
+    )
+    p_hu.add_argument(
+        "--next-steps",
+        nargs="*",
+        metavar="STEP",
+        default=argparse.SUPPRESS,
+        help="Replace the full next-steps list.",
+    )
+    p_hu.add_argument(
+        "--append-next-steps",
+        nargs="+",
+        metavar="STEP",
+        default=argparse.SUPPRESS,
+        help="Append one or more next steps.",
+    )
+    p_hu.add_argument(
+        "--context",
+        help="Replace handoff context (decisions, blockers, notes).",
+    )
+    p_hu.add_argument(
+        "--clear-context",
+        action="store_true",
+        help="Remove handoff context from the current state.",
+    )
+    p_hu.add_argument(
+        "--clear-next-steps",
+        action="store_true",
+        help="Remove all next steps from the current state.",
+    )
+    p_hu.add_argument(
+        "--json",
+        action="store_true",
+        help="Print the updated handoff state as JSON.",
+    )
+    p_hu.set_defaults(func=cmd_handoff_update)
 
     p_hc = handoff_sub.add_parser("clear", help="Clear all handoff files.")
     p_hc.set_defaults(func=cmd_handoff_clear)

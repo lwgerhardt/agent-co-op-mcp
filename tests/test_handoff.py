@@ -45,6 +45,7 @@ class TestPublish:
         assert state["work_mode"] == "background"
         assert state["next_steps"] == ["Write tests", "Deploy"]
         assert "published_at" in state
+        assert "updated_at" in state
 
     def test_plan_phase_sets_planner_role(self, tmp_path: Path) -> None:
         publish("Design the schema", "plan", "schema-proj", base=tmp_path)
