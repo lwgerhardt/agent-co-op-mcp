@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import subprocess
 from pathlib import Path
 
 import pytest
@@ -19,29 +18,7 @@ from agent_co_op.mcp_server import (
 )
 from agent_co_op.projects import init_project
 
-
-def _init_git_repo(path: Path) -> None:
-    subprocess.run(["git", "init", "-b", "main"], cwd=path, check=True, capture_output=True)
-    subprocess.run(
-        ["git", "config", "user.email", "test@example.com"],
-        cwd=path,
-        check=True,
-        capture_output=True,
-    )
-    subprocess.run(
-        ["git", "config", "user.name", "Test User"],
-        cwd=path,
-        check=True,
-        capture_output=True,
-    )
-    (path / "README.md").write_text("hello\n", encoding="utf-8")
-    subprocess.run(["git", "add", "README.md"], cwd=path, check=True, capture_output=True)
-    subprocess.run(
-        ["git", "commit", "-m", "initial commit"],
-        cwd=path,
-        check=True,
-        capture_output=True,
-    )
+from git_helpers import init_git_repo, requires_git
 
 
 class TestMcpTools:
@@ -70,9 +47,10 @@ class TestMcpTools:
 
 
 class TestMcpResources:
+    @requires_git
     def test_status_resource(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("AGENT_CO_OP_ROOT", str(tmp_path))
-        _init_git_repo(tmp_path)
+        init_git_repo(tmp_path)
         init_project("my-app", base=tmp_path)
         handoff_publish(objective="Plan", phase="plan", project_id="my-app")
 
@@ -93,7 +71,7 @@ class TestMcpResources:
 
         payload = json.loads(resource_handoff_state())
         assert payload["objective"] == "Work"
-        assert "git" not in payload or payload.get("objective") == "Work"
+        assert "git" not in payload
 
     def test_project_resource(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch

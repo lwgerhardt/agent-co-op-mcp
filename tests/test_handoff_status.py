@@ -9,29 +9,7 @@ from pathlib import Path
 
 from agent_co_op.handoff import _handoff_dir, handoff_status, publish
 
-
-def _init_git_repo(path: Path, branch: str = "main") -> None:
-    subprocess.run(["git", "init", "-b", branch], cwd=path, check=True, capture_output=True)
-    subprocess.run(
-        ["git", "config", "user.email", "test@example.com"],
-        cwd=path,
-        check=True,
-        capture_output=True,
-    )
-    subprocess.run(
-        ["git", "config", "user.name", "Test User"],
-        cwd=path,
-        check=True,
-        capture_output=True,
-    )
-    (path / "README.md").write_text("hello\n", encoding="utf-8")
-    subprocess.run(["git", "add", "README.md"], cwd=path, check=True, capture_output=True)
-    subprocess.run(
-        ["git", "commit", "-m", "initial commit"],
-        cwd=path,
-        check=True,
-        capture_output=True,
-    )
+from git_helpers import init_git_repo, requires_git
 
 
 class TestHandoffStatus:
@@ -66,8 +44,9 @@ class TestHandoffStatus:
         status = handoff_status(base=tmp_path)
         assert status["stale_warning"] == "handoff older than 7 days"
 
+    @requires_git
     def test_branch_mismatch_warning(self, tmp_path: Path) -> None:
-        _init_git_repo(tmp_path, branch="feature/handoff")
+        init_git_repo(tmp_path, branch="feature/handoff")
         publish("Feature work", "implement", "my-app", base=tmp_path)
         subprocess.run(
             ["git", "checkout", "-b", "other-branch"],
@@ -82,8 +61,9 @@ class TestHandoffStatus:
         assert "other-branch" in status["branch_mismatch_warning"]
         assert "git checkout feature/handoff" in status["branch_mismatch_warning"]
 
+    @requires_git
     def test_no_branch_mismatch_when_branches_match(self, tmp_path: Path) -> None:
-        _init_git_repo(tmp_path, branch="main")
+        init_git_repo(tmp_path, branch="main")
         publish("Main work", "plan", "my-app", base=tmp_path)
 
         status = handoff_status(base=tmp_path)
