@@ -3,14 +3,23 @@
 from __future__ import annotations
 
 import json
+import subprocess
 from pathlib import Path
 from typing import Any
 
 from .routing import resolve_routing, phase_to_role
 
+_HANDOFF_DIRNAME = ".agent-co-op"
+_GITIGNORE_MARKER = "# agent-co-op handoff state"
+_GITIGNORE_ENTRIES = (
+    f"{_HANDOFF_DIRNAME}/handoff-state.json",
+    f"{_HANDOFF_DIRNAME}/handoff.md",
+    f"{_HANDOFF_DIRNAME}/CURRENT_HANDOFF.md",
+)
+
 
 def _handoff_dir(base: Path | None = None) -> Path:
-    return (base or Path.cwd()) / ".agent-co-op"
+    return (base or Path.cwd()) / _HANDOFF_DIRNAME
 
 
 def load_project(project_id: str, base: Path | None = None) -> dict[str, Any] | None:
@@ -61,13 +70,89 @@ def init_project(
     return manifest_path
 
 
+def _detect_git_repository(base: Path) -> str:
+    """Return the origin remote URL when running inside a git repository."""
+    try:
+        result = subprocess.run(
+            ["git", "remote", "get-url", "origin"],
+            cwd=base,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except OSError:
+        return ""
+    if result.returncode != 0:
+        return ""
+    return result.stdout.strip()
+
+
+def _ensure_gitignore_entries(base: Path | None = None) -> bool:
+    """Append handoff-state gitignore entries when they are not already present."""
+    root = base or Path.cwd()
+    gitignore_path = root / ".gitignore"
+    existing = ""
+    if gitignore_path.exists():
+        existing = gitignore_path.read_text(encoding="utf-8")
+        if _GITIGNORE_MARKER in existing:
+            return False
+        if all(entry in existing for entry in _GITIGNORE_ENTRIES):
+            return False
+
+    block_lines = ["", _GITIGNORE_MARKER, *_GITIGNORE_ENTRIES, ""]
+    if existing and not existing.endswith("\n"):
+        block_lines.insert(0, "")
+    gitignore_path.parent.mkdir(parents=True, exist_ok=True)
+    with gitignore_path.open("a", encoding="utf-8") as fh:
+        fh.write("\n".join(block_lines))
+    return True
+
+
+def init_workspace(
+    project_id: str,
+    name: str | None = None,
+    description: str = "",
+    repository: str | None = None,
+    update_gitignore: bool = True,
+    base: Path | None = None,
+) -> dict[str, Any]:
+    """Bootstrap agent-co-op in a target workspace.
+
+    Creates the project manifest and optionally appends handoff-state entries
+    to .gitignore. Returns paths and suggested next commands.
+    """
+    root = base or Path.cwd()
+    repo = repository if repository is not None else _detect_git_repository(root)
+    manifest_path = init_project(
+        project_id,
+        name=name,
+        description=description,
+        repository=repo,
+        base=root,
+    )
+    gitignore_updated = _ensure_gitignore_entries(root) if update_gitignore else False
+    return {
+        "project_id": project_id,
+        "manifest_path": str(manifest_path),
+        "gitignore_updated": gitignore_updated,
+        "next_commands": [
+            (
+                "agent-co-op handoff publish "
+                f'--objective "Describe the current goal" --phase plan --project {project_id}'
+            ),
+            "agent-co-op pickup",
+            "agent-co-op handoff status",
+        ],
+    }
+
+
 def project_summary(project_id: str, base: Path | None = None) -> dict[str, Any]:
     """Return project manifest metadata and configured roles."""
     project = load_project(project_id, base=base)
     if project is None:
         raise FileNotFoundError(
             f"No project manifest found for {project_id!r}. "
-            f"Run 'agent-co-op project init {project_id}' first."
+            f"Run 'agent-co-op init {project_id}' first."
         )
     roles = project.get("roles", {})
     return {

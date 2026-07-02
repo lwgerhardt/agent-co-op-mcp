@@ -4,10 +4,20 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from agent_co_op.cli import build_parser, cmd_handoff_status, cmd_project_init
+from agent_co_op.cli import build_parser, cmd_handoff_status, cmd_init, cmd_project_init
 
 
 class TestCliParser:
+    def test_init_command(self) -> None:
+        parser = build_parser()
+        args = parser.parse_args(
+            ["init", "my-app", "--name", "My App", "--no-gitignore"]
+        )
+        assert args.command == "init"
+        assert args.project_id == "my-app"
+        assert args.name == "My App"
+        assert args.no_gitignore is True
+
     def test_handoff_status_command(self) -> None:
         parser = build_parser()
         args = parser.parse_args(["handoff", "status", "--json"])
@@ -41,6 +51,19 @@ class TestCliParser:
 
 
 class TestCliHandlers:
+    def test_init_bootstraps_workspace(
+        self, tmp_path: Path, monkeypatch, capsys
+    ) -> None:
+        monkeypatch.chdir(tmp_path)
+        parser = build_parser()
+        args = parser.parse_args(["init", "my-app", "--name", "My App"])
+        assert cmd_init(args) == 0
+        assert (tmp_path / ".agent-co-op" / "my-app.json").exists()
+        assert (tmp_path / ".gitignore").exists()
+        captured = capsys.readouterr()
+        assert "Next steps:" in captured.out
+        assert "handoff publish" in captured.out
+
     def test_handoff_status_json_without_state(
         self, tmp_path: Path, monkeypatch, capsys
     ) -> None:

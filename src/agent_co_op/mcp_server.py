@@ -61,6 +61,25 @@ def project_show(project_id: str) -> str:
 
 
 @mcp.tool()
+def project_init(
+    project_id: str,
+    name: str = "",
+    description: str = "",
+    repository: str = "",
+    update_gitignore: bool = True,
+) -> str:
+    """Create a starter project manifest and optional .gitignore entries."""
+    result = _projects.init_workspace(
+        project_id,
+        name=name or None,
+        description=description,
+        repository=repository or None,
+        update_gitignore=update_gitignore,
+    )
+    return json.dumps(result, indent=2)
+
+
+@mcp.tool()
 def routing_show(project_id: str, phase: str = "") -> str:
     """Show routing info for a project and optional phase."""
     p: str | None = phase or None
