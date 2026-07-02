@@ -1,0 +1,155 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/lwgerhardt/agent-co-op-mcp/handoff-state.schema.json",
+  "title": "agent-co-op handoff state",
+  "type": "object",
+  "required": ["phase", "objective", "project_id", "role", "work_mode", "published_at"],
+  "properties": {
+    "version": {
+      "type": "string"
+    },
+    "phase": {
+      "type": "string",
+      "enum": ["plan", "implement", "verify", "resume"]
+    },
+    "objective": {
+      "type": "string",
+      "minLength": 1
+    },
+    "project_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "role": {
+      "type": "string"
+    },
+    "work_mode": {
+      "type": "string"
+    },
+    "next_steps": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "context": {
+      "oneOf": [
+        {
+          "type": "string"
+        },
+        {
+          "$ref": "#/$defs/contextBlock"
+        }
+      ]
+    },
+    "git": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "provenance": {
+      "$ref": "#/$defs/provenance"
+    },
+    "published_at": {
+      "type": "string"
+    },
+    "updated_at": {
+      "type": "string"
+    },
+    "restored_at": {
+      "type": "string"
+    },
+    "restored_from_history_id": {
+      "type": "string"
+    }
+  },
+  "additionalProperties": true,
+  "$defs": {
+    "contextBlock": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "progress_summary": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "recent_decisions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["decision"],
+            "properties": {
+              "decision": {
+                "type": "string"
+              },
+              "rationale": {
+                "type": "string"
+              },
+              "at": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "read_map": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/readMapEntry"
+          }
+        },
+        "blockers": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "manual_checks_pending": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "notes": {
+          "type": "string"
+        }
+      }
+    },
+    "readMapEntry": {
+      "type": "object",
+      "required": ["file"],
+      "additionalProperties": false,
+      "properties": {
+        "file": {
+          "type": "string",
+          "minLength": 1
+        },
+        "lines": {
+          "type": "string"
+        },
+        "why": {
+          "type": "string"
+        }
+      }
+    },
+    "provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "captured_by": {
+          "type": "string",
+          "enum": ["cli", "mcp"]
+        },
+        "source_ide": {
+          "type": "string"
+        },
+        "transcript_path": {
+          "type": "string"
+        }
+      }
+    }
+  }
+}

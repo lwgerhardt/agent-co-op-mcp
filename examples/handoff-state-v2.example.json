@@ -1,0 +1,44 @@
+{
+  "version": "2.0",
+  "phase": "implement",
+  "objective": "Add user authentication API",
+  "project_id": "my-saas",
+  "role": "verifier",
+  "work_mode": "background",
+  "next_steps": [
+    "Run verification queue",
+    "Review manual checks"
+  ],
+  "context": {
+    "progress_summary": [
+      "JWT middleware added",
+      "Login endpoint implemented"
+    ],
+    "read_map": [
+      {
+        "file": "src/auth/login.py",
+        "lines": "1-80",
+        "why": "Core login flow"
+      }
+    ],
+    "blockers": [
+      "Waiting on OAuth client id from platform team"
+    ],
+    "manual_checks_pending": [
+      "Verify logout clears session cookie"
+    ]
+  },
+  "git": {
+    "branch": "feature/auth",
+    "base_branch": "main",
+    "modified_files": ["src/auth/login.py"],
+    "uncommitted": true,
+    "last_commit": "abc1234 Add login endpoint"
+  },
+  "provenance": {
+    "captured_by": "cli",
+    "source_ide": "cursor"
+  },
+  "published_at": "2026-07-02T12:00:00+00:00",
+  "updated_at": "2026-07-02T12:00:00+00:00"
+}

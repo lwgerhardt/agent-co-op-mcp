@@ -13,5 +13,27 @@
     "scaffold": {
       "notes": "Use the project README for orientation before touching code"
     }
+  },
+  "verification": {
+    "profiles": {
+      "default": {
+        "expected_branch": "main",
+        "commands": [
+          {
+            "id": "lint",
+            "label": "Ruff",
+            "command": "ruff check src/ tests/"
+          },
+          {
+            "id": "test",
+            "label": "Pytest",
+            "command": "pytest -q"
+          }
+        ],
+        "manual_checks": [
+          "Smoke test login flow"
+        ]
+      }
+    }
   }
 }

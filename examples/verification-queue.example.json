@@ -1,0 +1,23 @@
+{
+  "version": "1.0",
+  "profile_id": "default",
+  "project_id": "my-saas",
+  "expected_branch": "main",
+  "commands": [
+    {
+      "id": "lint",
+      "label": "Ruff lint",
+      "command": "ruff check src/ tests/",
+      "timeout": 120
+    },
+    {
+      "id": "test",
+      "label": "Pytest",
+      "command": "pytest -q",
+      "timeout": 300
+    }
+  ],
+  "manual_checks": [
+    "Smoke test login flow in the browser"
+  ]
+}

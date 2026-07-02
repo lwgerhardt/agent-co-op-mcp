@@ -9,6 +9,11 @@ from pathlib import Path
 
 from . import handoff, projects
 from .routing import VALID_PHASES, VALID_ROLES, phase_to_role, resolve_routing
+from . import verification
+
+EXIT_SUCCESS = 0
+EXIT_ERROR = 1
+EXIT_USAGE = 2
 
 
 def cmd_pickup(args: argparse.Namespace) -> int:
@@ -16,26 +21,26 @@ def cmd_pickup(args: argparse.Namespace) -> int:
         state = handoff.read_state()
         if state is None:
             print("No handoff state found.", file=sys.stderr)
-            return 1
+            return EXIT_USAGE
         print(json.dumps(state, indent=2))
-        return 0
+        return EXIT_SUCCESS
     try:
         result = projects.pickup(project_id=args.project or None)
         print(result)
-        return 0
+        return EXIT_SUCCESS
     except FileNotFoundError as exc:
         print(f"Error: {exc}", file=sys.stderr)
-        return 1
+        return EXIT_USAGE
 
 
 def cmd_role_prompt(args: argparse.Namespace) -> int:
     try:
         result = projects.role_prompt(args.project_id, args.role, phase=args.phase)
         print(result)
-        return 0
+        return EXIT_SUCCESS
     except (ValueError, FileNotFoundError) as exc:
         print(f"Error: {exc}", file=sys.stderr)
-        return 1
+        return EXIT_USAGE
 
 
 def cmd_routing_show(args: argparse.Namespace) -> int:
@@ -44,10 +49,10 @@ def cmd_routing_show(args: argparse.Namespace) -> int:
         role = phase_to_role(phase) if phase else "planner"
         info = resolve_routing(role, phase=phase, project_id=args.project_id)
         print(json.dumps(info, indent=2))
-        return 0
+        return EXIT_SUCCESS
     except ValueError as exc:
         print(f"Error: {exc}", file=sys.stderr)
-        return 1
+        return EXIT_USAGE
 
 
 def cmd_handoff_publish(args: argparse.Namespace) -> int:
@@ -61,10 +66,10 @@ def cmd_handoff_publish(args: argparse.Namespace) -> int:
             context=args.context,
         )
         print(f"Handoff published for {args.project} / {args.phase}.")
-        return 0
+        return EXIT_SUCCESS
     except (ValueError, OSError) as exc:
         print(f"Error: {exc}", file=sys.stderr)
-        return 1
+        return EXIT_ERROR
 
 
 def cmd_handoff_update(args: argparse.Namespace) -> int:
@@ -73,7 +78,7 @@ def cmd_handoff_update(args: argparse.Namespace) -> int:
             "Error: specify either --next-steps or --append-next-steps, not both.",
             file=sys.stderr,
         )
-        return 2
+        return EXIT_USAGE
 
     try:
         state = handoff.update(
@@ -89,35 +94,59 @@ def cmd_handoff_update(args: argparse.Namespace) -> int:
         )
     except handoff.HandoffUpdateError as exc:
         print(f"Error: {exc}", file=sys.stderr)
-        return 2
+        return EXIT_USAGE
     except FileNotFoundError as exc:
         print(f"Error: {exc}", file=sys.stderr)
-        return 1
+        return EXIT_USAGE
     except ValueError as exc:
         print(f"Error: {exc}", file=sys.stderr)
-        return 1
+        return EXIT_ERROR
 
     if args.json:
         print(json.dumps(state, indent=2))
     else:
         print(f"Handoff updated for {state['project_id']} / {state['phase']}.")
-    return 0
+    return EXIT_SUCCESS
 
 
 def cmd_handoff_clear(args: argparse.Namespace) -> int:
     handoff.clear()
     print("Handoff files cleared.")
-    return 0
+    return EXIT_SUCCESS
+
+
+def cmd_handoff_publish_for_verifier(args: argparse.Namespace) -> int:
+    try:
+        queue = verification.publish_for_verifier(
+            args.objective,
+            args.project,
+            profile_id=args.profile,
+            next_steps=args.next_steps or None,
+            context=args.context,
+        )
+    except (FileNotFoundError, verification.VerificationError) as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return EXIT_USAGE
+    except (ValueError, OSError) as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return EXIT_ERROR
+
+    print(
+        f"Handoff published for verifier: {args.project} / implement "
+        f"(profile {queue['profile_id']})."
+    )
+    print(f"Verification queue: {verification.queue_path()}")
+    return EXIT_SUCCESS
 
 
 def cmd_handoff_status(args: argparse.Namespace) -> int:
     status = handoff.handoff_status()
     if args.json:
         print(json.dumps(status, indent=2))
-        return 0
+        return EXIT_SUCCESS
     if not status["has_state"]:
         print("No handoff state found.")
-        return 1
+        return EXIT_USAGE
     state = status["state"]
     assert state is not None
     print(f"Project:  {state.get('project_id', '(unknown)')}")
@@ -132,7 +161,62 @@ def cmd_handoff_status(args: argparse.Namespace) -> int:
         print("Next steps:")
         for step in next_steps:
             print(f"  - {step}")
-    return 0
+    if status.get("verification_warning"):
+        print(f"Warning: {status['verification_warning']}")
+    return EXIT_SUCCESS
+
+
+def cmd_verify_run(args: argparse.Namespace) -> int:
+    if bool(args.profile) ^ bool(args.project):
+        print(
+            "Error: --profile and --project must be used together.",
+            file=sys.stderr,
+        )
+        return EXIT_USAGE
+    try:
+        summary = verification.run_verification(
+            profile_id=args.profile,
+            project_id=args.project,
+            stop_on_failure=not args.continue_on_failure,
+        )
+    except FileNotFoundError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return EXIT_USAGE
+    except verification.VerificationError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return EXIT_USAGE
+
+    if args.json:
+        print(json.dumps(summary, indent=2))
+    else:
+        print(f"Overall: {summary['overall']}")
+        for result in summary["results"]:
+            print(
+                f"  {result['label']}: {result['status']} "
+                f"(exit {result.get('exit_code')})"
+            )
+        manual = summary.get("manual_checks", [])
+        if manual:
+            print("Manual checks pending:")
+            for item in manual:
+                print(f"  - {item}")
+        print(f"Report: {summary['paths']['report_md']}")
+
+    return EXIT_SUCCESS if summary["overall"] == "PASS" else EXIT_ERROR
+
+
+def cmd_verify_report(args: argparse.Namespace) -> int:
+    report = verification.verification_report()
+    if args.json:
+        print(json.dumps(report, indent=2))
+        return EXIT_SUCCESS if report["found"] else EXIT_USAGE
+    if not report["found"]:
+        print("No verification report found.", file=sys.stderr)
+        return EXIT_USAGE
+    summary = report["summary"]
+    print(f"Overall: {summary.get('overall', '(unknown)')}")
+    print(f"Report: {report['paths']['report_md']}")
+    return EXIT_SUCCESS
 
 
 def cmd_handoff_restore(args: argparse.Namespace) -> int:
@@ -470,6 +554,62 @@ def build_parser() -> argparse.ArgumentParser:
         help="Print the restored handoff state as JSON.",
     )
     p_hr.set_defaults(func=cmd_handoff_restore)
+
+    p_hpf = handoff_sub.add_parser(
+        "publish-for-verifier",
+        help="Publish implement-phase handoff and write verification queue.",
+    )
+    p_hpf.add_argument("--objective", required=True, help="Session objective.")
+    p_hpf.add_argument("--project", required=True, metavar="ID", help="Project ID.")
+    p_hpf.add_argument(
+        "--profile",
+        default="default",
+        help="Verification profile id from project manifest.",
+    )
+    p_hpf.add_argument(
+        "--next-steps",
+        nargs="*",
+        metavar="STEP",
+        help="One or more next steps.",
+    )
+    p_hpf.add_argument(
+        "--context",
+        help="Optional decisions, blockers, or background context.",
+    )
+    p_hpf.set_defaults(func=cmd_handoff_publish_for_verifier)
+
+    # verify
+    p_verify = sub.add_parser("verify", help="Verification queue commands.")
+    verify_sub = p_verify.add_subparsers(dest="verify_command", required=True)
+
+    p_vr = verify_sub.add_parser("run", help="Run the verification queue.")
+    p_vr.add_argument(
+        "--profile",
+        help="Load queue from project manifest profile instead of queue file.",
+    )
+    p_vr.add_argument(
+        "--project",
+        help="Project id (required with --profile).",
+    )
+    p_vr.add_argument(
+        "--continue-on-failure",
+        action="store_true",
+        help="Run all commands even after a failure.",
+    )
+    p_vr.add_argument(
+        "--json",
+        action="store_true",
+        help="Print verification summary as JSON.",
+    )
+    p_vr.set_defaults(func=cmd_verify_run)
+
+    p_vrep = verify_sub.add_parser("report", help="Show latest verification report.")
+    p_vrep.add_argument(
+        "--json",
+        action="store_true",
+        help="Print report metadata as JSON.",
+    )
+    p_vrep.set_defaults(func=cmd_verify_report)
 
     # project
     p_project = sub.add_parser("project", help="Project manifest commands.")

@@ -33,6 +33,9 @@
       "additionalProperties": {
         "$ref": "#/$defs/roleConfig"
       }
+    },
+    "verification": {
+      "$ref": "#/$defs/verificationConfig"
     }
   },
   "$defs": {
@@ -54,6 +57,66 @@
         "work_mode": {
           "type": "string",
           "enum": ["background", "think", "longContext", "default"]
+        }
+      }
+    },
+    "verificationCommand": {
+      "type": "object",
+      "required": ["id", "label", "command"],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "label": {
+          "type": "string",
+          "minLength": 1
+        },
+        "command": {
+          "type": "string",
+          "minLength": 1
+        },
+        "timeout": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "verificationProfile": {
+      "type": "object",
+      "required": ["commands"],
+      "additionalProperties": false,
+      "properties": {
+        "expected_branch": {
+          "type": "string"
+        },
+        "commands": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/verificationCommand"
+          }
+        },
+        "manual_checks": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
+    "verificationConfig": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "profiles": {
+          "type": "object",
+          "minProperties": 1,
+          "additionalProperties": {
+            "$ref": "#/$defs/verificationProfile"
+          }
         }
       }
     }

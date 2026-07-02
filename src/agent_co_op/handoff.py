@@ -292,7 +292,7 @@ def publish(
     phase: str,
     project_id: str,
     next_steps: list[str] | None = None,
-    context: str | None = None,
+    context: str | dict[str, Any] | None = None,
     base: Path | None = None,
 ) -> None:
     """Write handoff-state.json, handoff.md, and CURRENT_HANDOFF.md.
@@ -326,6 +326,7 @@ def publish(
     if git_snapshot is not None:
         state["git"] = git_snapshot
 
+    _warn_state_schema(state)
     _write_handoff_files(state, base=base)
 
 
@@ -335,7 +336,7 @@ def update(
     phase: str | None = None,
     next_steps: list[str] | None = None,
     append_next_steps: list[str] | None = None,
-    context: str | None = None,
+    context: str | dict[str, Any] | None = None,
     clear_context: bool = False,
     clear_next_steps: bool = False,
     base: Path | None = None,
@@ -413,7 +414,9 @@ def update(
     if clear_context:
         state.pop("context", None)
     elif context is not None:
-        if context.strip():
+        if isinstance(context, dict):
+            state["context"] = context
+        elif context.strip():
             state["context"] = context
         else:
             state.pop("context", None)
@@ -422,6 +425,7 @@ def update(
     git_snapshot = _capture_git_snapshot(base)
     if git_snapshot is not None:
         state["git"] = git_snapshot
+    _warn_state_schema(state)
     _write_handoff_files(state, base=base)
     return state
 
@@ -438,6 +442,10 @@ def _render_handoff_md(state: dict[str, Any], routing: dict[str, Any]) -> str:
     handoff_context = state.get("context")
     if isinstance(handoff_context, str) and handoff_context.strip():
         lines += ["", "## Handoff context", handoff_context.strip()]
+    elif isinstance(handoff_context, dict):
+        from .handoff_context import format_context_sections, parse_context
+
+        lines += format_context_sections(parse_context(state))
     git_block = state.get("git")
     if isinstance(git_block, dict):
         lines += _format_git_lines(git_block)
@@ -474,13 +482,43 @@ def clear(base: Path | None = None) -> None:
 
 
 def _handoff_paths(base: Path | None = None) -> dict[str, str]:
+    from .verification import queue_path, report_json_path, report_md_path
+
     d = _handoff_dir(base)
     return {
         "state_json": str(d / "handoff-state.json"),
         "handoff_md": str(d / "handoff.md"),
         "published_md": str(d / "CURRENT_HANDOFF.md"),
         "history_dir": str(_history_dir(base)),
+        "verification_queue": str(queue_path(base)),
+        "verification_report_md": str(report_md_path(base)),
+        "verification_report_json": str(report_json_path(base)),
     }
+
+
+def _warn_state_schema(state: dict[str, Any]) -> None:
+    from .handoff_state import validate_handoff_state
+
+    for warning in validate_handoff_state(state):
+        print(f"Warning: handoff state schema: {warning}", file=sys.stderr)
+
+
+def _verification_warning(
+    state: dict[str, Any], base: Path | None = None
+) -> str | None:
+    if state.get("phase") != "implement":
+        return None
+    next_steps = state.get("next_steps", [])
+    if isinstance(next_steps, list) and next_steps:
+        return None
+    from .verification import queue_exists
+
+    if queue_exists(base):
+        return None
+    return (
+        "implement phase has no next_steps and no verification queue; "
+        "add verification steps before handoff to verifier"
+    )
 
 
 def _capture_git_snapshot(base: Path | None = None) -> dict[str, Any] | None:
@@ -554,6 +592,9 @@ def handoff_status(base: Path | None = None) -> dict[str, Any]:
         branch_warning = _branch_mismatch_warning(state, base)
         if branch_warning:
             result["branch_mismatch_warning"] = branch_warning
+        verification_warning = _verification_warning(state, base)
+        if verification_warning:
+            result["verification_warning"] = verification_warning
         for key in ("phase", "objective", "project_id", "role"):
             if key in state:
                 result[key] = state[key]

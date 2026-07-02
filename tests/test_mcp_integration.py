@@ -89,3 +89,31 @@ class TestMcpResources:
         monkeypatch.setenv("AGENT_CO_OP_ROOT", str(tmp_path))
         payload = json.loads(resource_handoff_project("missing"))
         assert "error" in payload
+
+    def test_run_verification_tool(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from agent_co_op.mcp_server import handoff_run_verification
+
+        monkeypatch.setenv("AGENT_CO_OP_ROOT", str(tmp_path))
+        queue = {
+            "version": "1.0",
+            "profile_id": "default",
+            "project_id": "my-app",
+            "commands": [{"id": "ok", "label": "Pass", "command": "true"}],
+        }
+        (tmp_path / ".agent-co-op").mkdir(parents=True)
+        (tmp_path / ".agent-co-op" / "verification-queue.json").write_text(
+            json.dumps(queue), encoding="utf-8"
+        )
+        payload = json.loads(handoff_run_verification())
+        assert payload["overall"] == "PASS"
+
+    def test_queue_resource_missing(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from agent_co_op.mcp_server import resource_handoff_queue
+
+        monkeypatch.setenv("AGENT_CO_OP_ROOT", str(tmp_path))
+        payload = json.loads(resource_handoff_queue())
+        assert payload["error"] == "No verification queue found."

@@ -67,6 +67,31 @@ def resource_handoff_project(project_id: str) -> str:
     return json.dumps(summary, indent=2)
 
 
+@mcp.resource("handoff://queue")
+def resource_handoff_queue() -> str:
+    """Verification queue JSON."""
+    from . import verification as _verification
+
+    try:
+        queue = _verification.load_queue(base=_resolve_base(""))
+    except _verification.VerificationError as exc:
+        return json.dumps({"error": str(exc)})
+    if queue is None:
+        return json.dumps({"error": "No verification queue found."})
+    return json.dumps(queue, indent=2)
+
+
+@mcp.resource("handoff://report")
+def resource_handoff_report() -> str:
+    """Latest verification report JSON summary."""
+    from . import verification as _verification
+
+    report = _verification.verification_report(base=_resolve_base(""))
+    if not report["found"]:
+        return json.dumps({"error": "No verification report found."})
+    return json.dumps(report["summary"], indent=2)
+
+
 @mcp.tool()
 def handoff_pickup(project_id: str = "", workspace_path: str = "") -> str:
     """Return a paste-ready pickup prompt for the current handoff state."""
@@ -213,6 +238,73 @@ def project_validate(project_id: str, workspace_path: str = "") -> str:
     """Validate a project manifest and return a JSON report."""
     return json.dumps(
         _projects.validate_project(project_id, base=_resolve_base(workspace_path)),
+        indent=2,
+    )
+
+
+@mcp.tool()
+def handoff_publish_for_verifier(
+    objective: str,
+    project_id: str,
+    profile_id: str = "default",
+    next_steps: list[str] | None = None,
+    context: str = "",
+    workspace_path: str = "",
+) -> str:
+    """Publish implement-phase handoff and write verification queue."""
+    from . import verification as _verification
+
+    try:
+        queue = _verification.publish_for_verifier(
+            objective,
+            project_id,
+            profile_id=profile_id,
+            next_steps=next_steps or None,
+            context=context or None,
+            base=_resolve_base(workspace_path),
+        )
+    except (FileNotFoundError, _verification.VerificationError) as exc:
+        return json.dumps({"error": str(exc)})
+    return json.dumps(
+        {
+            "status": "published",
+            "project_id": project_id,
+            "profile_id": queue["profile_id"],
+            "queue_path": str(_verification.queue_path(_resolve_base(workspace_path))),
+        },
+        indent=2,
+    )
+
+
+@mcp.tool()
+def handoff_run_verification(
+    profile_id: str = "",
+    project_id: str = "",
+    continue_on_failure: bool = False,
+    workspace_path: str = "",
+) -> str:
+    """Run verification queue and return PASS/FAIL summary JSON."""
+    from . import verification as _verification
+
+    try:
+        summary = _verification.run_verification(
+            profile_id=profile_id or None,
+            project_id=project_id or None,
+            stop_on_failure=not continue_on_failure,
+            base=_resolve_base(workspace_path),
+        )
+    except (FileNotFoundError, _verification.VerificationError) as exc:
+        return json.dumps({"error": str(exc)})
+    return json.dumps(summary, indent=2)
+
+
+@mcp.tool()
+def handoff_verification_report(workspace_path: str = "") -> str:
+    """Return latest verification report metadata and summary."""
+    from . import verification as _verification
+
+    return json.dumps(
+        _verification.verification_report(base=_resolve_base(workspace_path)),
         indent=2,
     )
 
