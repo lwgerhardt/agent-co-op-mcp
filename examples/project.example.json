@@ -1,0 +1,17 @@
+{
+  "id": "my-saas",
+  "name": "My SaaS App",
+  "description": "A web application for team collaboration",
+  "repository": "https://github.com/example/my-saas",
+  "roles": {
+    "planner": {
+      "notes": "Focus on API design and data model first"
+    },
+    "verifier": {
+      "notes": "Run unit tests and integration tests before marking done"
+    },
+    "scaffold": {
+      "notes": "Use the project README for orientation before touching code"
+    }
+  }
+}

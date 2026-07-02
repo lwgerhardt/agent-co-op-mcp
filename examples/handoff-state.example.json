@@ -1,0 +1,13 @@
+{
+  "phase": "implement",
+  "objective": "Add user authentication with JWT tokens",
+  "project_id": "my-saas",
+  "role": "verifier",
+  "work_mode": "background",
+  "next_steps": [
+    "Write unit tests for the auth middleware",
+    "Test login and token-refresh flows end-to-end",
+    "Update the API reference docs"
+  ],
+  "published_at": "2026-07-02T06:00:00+00:00"
+}
