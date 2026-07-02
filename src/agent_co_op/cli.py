@@ -68,6 +68,56 @@ def cmd_handoff_clear(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_handoff_status(args: argparse.Namespace) -> int:
+    status = handoff.handoff_status()
+    if args.json:
+        print(json.dumps(status, indent=2))
+        return 0
+    if not status["has_state"]:
+        print("No handoff state found.")
+        return 1
+    state = status["state"]
+    assert state is not None
+    print(f"Project:  {state.get('project_id', '(unknown)')}")
+    print(f"Phase:    {state.get('phase', '(unknown)')}")
+    print(f"Role:     {state.get('role', '(unknown)')}")
+    print(f"Objective: {state.get('objective', '(none)')}")
+    next_steps: list[str] = state.get("next_steps", [])
+    if next_steps:
+        print("Next steps:")
+        for step in next_steps:
+            print(f"  - {step}")
+    return 0
+
+
+def cmd_project_show(args: argparse.Namespace) -> int:
+    try:
+        summary = projects.project_summary(args.project_id)
+        print(json.dumps(summary, indent=2))
+        return 0
+    except FileNotFoundError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 1
+
+
+def cmd_project_init(args: argparse.Namespace) -> int:
+    try:
+        path = projects.init_project(
+            args.project_id,
+            name=args.name,
+            description=args.description or "",
+            repository=args.repository or "",
+        )
+        print(f"Project manifest created at {path}")
+        return 0
+    except FileExistsError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 1
+    except OSError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 1
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="agent-co-op",
@@ -133,6 +183,29 @@ def build_parser() -> argparse.ArgumentParser:
 
     p_hc = handoff_sub.add_parser("clear", help="Clear all handoff files.")
     p_hc.set_defaults(func=cmd_handoff_clear)
+
+    p_hs = handoff_sub.add_parser("status", help="Show current handoff state.")
+    p_hs.add_argument(
+        "--json",
+        action="store_true",
+        help="Print status as JSON instead of a human summary.",
+    )
+    p_hs.set_defaults(func=cmd_handoff_status)
+
+    # project
+    p_project = sub.add_parser("project", help="Project manifest commands.")
+    project_sub = p_project.add_subparsers(dest="project_command", required=True)
+
+    p_ps = project_sub.add_parser("show", help="Show a project manifest summary.")
+    p_ps.add_argument("project_id", help="Project ID.")
+    p_ps.set_defaults(func=cmd_project_show)
+
+    p_pi = project_sub.add_parser("init", help="Create a starter project manifest.")
+    p_pi.add_argument("project_id", help="Project ID.")
+    p_pi.add_argument("--name", help="Human-readable project name.")
+    p_pi.add_argument("--description", help="Short project description.")
+    p_pi.add_argument("--repository", help="Repository URL.")
+    p_pi.set_defaults(func=cmd_project_init)
 
     return parser
 

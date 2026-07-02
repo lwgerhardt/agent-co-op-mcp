@@ -29,7 +29,7 @@ def publish(
     from .routing import phase_to_role, resolve_routing
 
     role = phase_to_role(phase)
-    routing = resolve_routing(role, phase=phase)
+    routing = resolve_routing(role, phase=phase, project_id=project_id, base=base)
     steps: list[str] = next_steps or []
 
     d = _handoff_dir(base)
@@ -88,6 +88,17 @@ def clear(base: Path | None = None) -> None:
         p = d / name
         if p.exists():
             p.unlink()
+
+
+def handoff_status(base: Path | None = None) -> dict[str, Any]:
+    """Return current handoff state plus whether a pickup prompt is available."""
+    state = read_state(base)
+    current = read_current_handoff(base)
+    return {
+        "has_state": state is not None,
+        "has_current_handoff": current is not None,
+        "state": state,
+    }
 
 
 def read_state(base: Path | None = None) -> dict[str, Any] | None:
