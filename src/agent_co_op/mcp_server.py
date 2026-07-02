@@ -20,19 +20,13 @@ mcp = FastMCP("agent-co-op")
 @mcp.tool()
 def handoff_pickup(project_id: str = "") -> str:
     """Return a paste-ready pickup prompt for the current handoff state."""
-    try:
-        return _projects.pickup(project_id=project_id or None)
-    except FileNotFoundError as exc:
-        return f"Error: {exc}"
+    return _projects.pickup(project_id=project_id or None)
 
 
 @mcp.tool()
 def handoff_role_prompt(project_id: str, role: str, phase: str = "") -> str:
     """Return a paste-ready role-prompt for the given project, role, and phase."""
-    try:
-        return _projects.role_prompt(project_id, role, phase=phase or None)
-    except ValueError as exc:
-        return f"Error: {exc}"
+    return _projects.role_prompt(project_id, role, phase=phase or None)
 
 
 @mcp.tool()
@@ -40,18 +34,11 @@ def handoff_publish(
     objective: str,
     phase: str,
     project_id: str,
-    next_steps: str = "",
+    next_steps: list[str] | None = None,
 ) -> str:
-    """Publish a handoff state.
-
-    next_steps is a newline-separated list of steps.
-    """
-    steps = [s.strip() for s in next_steps.splitlines() if s.strip()]
-    try:
-        _handoff.publish(objective, phase, project_id, next_steps=steps or None)
-        return f"Handoff published for {project_id} / {phase}."
-    except Exception as exc:
-        return f"Error: {exc}"
+    """Publish a handoff state."""
+    _handoff.publish(objective, phase, project_id, next_steps=next_steps or None)
+    return f"Handoff published for {project_id} / {phase}."
 
 
 @mcp.tool()
@@ -64,13 +51,10 @@ def handoff_clear() -> str:
 @mcp.tool()
 def routing_show(project_id: str, phase: str = "") -> str:
     """Show routing info for a project and optional phase."""
-    try:
-        p: str | None = phase or None
-        role = phase_to_role(p) if p else "planner"
-        info = resolve_routing(role, phase=p, project_id=project_id)
-        return json.dumps(info, indent=2)
-    except ValueError as exc:
-        return f"Error: {exc}"
+    p: str | None = phase or None
+    role = phase_to_role(p) if p else "planner"
+    info = resolve_routing(role, phase=p, project_id=project_id)
+    return json.dumps(info, indent=2)
 
 
 def main() -> None:

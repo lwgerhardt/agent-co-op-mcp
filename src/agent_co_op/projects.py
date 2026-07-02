@@ -75,7 +75,7 @@ def role_prompt(
 def pickup(project_id: str | None = None, base: Path | None = None) -> str:
     """Return a paste-ready pickup prompt derived from current handoff state.
 
-    Raises FileNotFoundError if no handoff state exists.
+    Raises FileNotFoundError if no handoff state exists; ValueError if state is invalid.
     """
     from .handoff import read_state
 
