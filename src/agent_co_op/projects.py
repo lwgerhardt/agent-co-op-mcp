@@ -273,6 +273,9 @@ def role_prompt(
             "## Current objective",
             state.get("objective", "(none)"),
         ]
+        handoff_context = state.get("context")
+        if isinstance(handoff_context, str) and handoff_context.strip():
+            lines += ["", "## Handoff context", handoff_context.strip()]
         next_steps: list[str] = state.get("next_steps", [])
         if next_steps:
             lines += ["", "## Next steps"]

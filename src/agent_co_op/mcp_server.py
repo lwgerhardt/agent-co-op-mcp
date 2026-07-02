@@ -35,10 +35,40 @@ def handoff_publish(
     phase: str,
     project_id: str,
     next_steps: list[str] | None = None,
+    context: str = "",
 ) -> str:
     """Publish a handoff state."""
-    _handoff.publish(objective, phase, project_id, next_steps=next_steps or None)
+    _handoff.publish(
+        objective,
+        phase,
+        project_id,
+        next_steps=next_steps or None,
+        context=context or None,
+    )
     return f"Handoff published for {project_id} / {phase}."
+
+
+@mcp.tool()
+def handoff_update(
+    objective: str = "",
+    phase: str = "",
+    next_steps: list[str] | None = None,
+    append_next_steps: list[str] | None = None,
+    context: str = "",
+    clear_context: bool = False,
+    clear_next_steps: bool = False,
+) -> str:
+    """Patch the current handoff state without a full republish."""
+    state = _handoff.update(
+        objective=objective or None,
+        phase=phase or None,
+        next_steps=next_steps,
+        append_next_steps=append_next_steps,
+        context=context or None,
+        clear_context=clear_context,
+        clear_next_steps=clear_next_steps,
+    )
+    return json.dumps(state, indent=2)
 
 
 @mcp.tool()

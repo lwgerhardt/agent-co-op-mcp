@@ -8,6 +8,7 @@ from agent_co_op.cli import (
     build_parser,
     cmd_handoff_history,
     cmd_handoff_status,
+    cmd_handoff_update,
     cmd_init,
     cmd_project_init,
     cmd_project_validate,
@@ -24,6 +25,21 @@ class TestCliParser:
         assert args.project_id == "my-app"
         assert args.name == "My App"
         assert args.no_gitignore is True
+
+    def test_handoff_update_command(self) -> None:
+        parser = build_parser()
+        args = parser.parse_args(
+            [
+                "handoff",
+                "update",
+                "--append-next-steps",
+                "Write tests",
+                "--json",
+            ]
+        )
+        assert args.handoff_command == "update"
+        assert args.append_next_steps == ["Write tests"]
+        assert args.json is True
 
     def test_handoff_status_command(self) -> None:
         parser = build_parser()
@@ -167,3 +183,16 @@ class TestCliHandlers:
         assert cmd_project_validate(args) == 1
         captured = capsys.readouterr()
         assert "Manifest invalid" in captured.err
+
+    def test_handoff_update_cli(self, tmp_path: Path, monkeypatch, capsys) -> None:
+        from agent_co_op.handoff import publish
+
+        monkeypatch.chdir(tmp_path)
+        publish("Build feature", "implement", "my-app", base=tmp_path)
+        parser = build_parser()
+        args = parser.parse_args(
+            ["handoff", "update", "--append-next-steps", "Run tests"]
+        )
+        assert cmd_handoff_update(args) == 0
+        captured = capsys.readouterr()
+        assert "Handoff updated" in captured.out

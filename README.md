@@ -48,8 +48,9 @@ agent-co-op role-prompt <project-id> --role <role> [--phase plan|implement|verif
 # Show routing info for a project
 agent-co-op routing show <project-id> [--phase plan|implement|verify|resume]
 
-# Publish, inspect, or clear handoff state
-agent-co-op handoff publish --objective "..." --phase implement --project <id> [--next-steps STEP ...]
+# Publish, inspect, patch, or clear handoff state
+agent-co-op handoff publish --objective "..." --phase implement --project <id> [--next-steps STEP ...] [--context TEXT]
+agent-co-op handoff update [--objective TEXT] [--phase plan|implement|verify|resume] [--next-steps STEP ...] [--append-next-steps STEP ...] [--context TEXT] [--clear-context] [--clear-next-steps] [--json]
 agent-co-op handoff status [--json]
 agent-co-op handoff history [--json] [--limit N] [--id ENTRY_ID]
 agent-co-op handoff clear
@@ -153,6 +154,7 @@ Add to `.vscode/mcp.json` (VS Code 1.99+):
 | `handoff_pickup` | Paste-ready prompt for the current handoff state |
 | `handoff_role_prompt` | Role-prompt for a specific project/role/phase |
 | `handoff_publish` | Write new handoff state files |
+| `handoff_update` | Patch the current handoff state without a full republish |
 | `handoff_clear` | Delete all handoff files |
 | `handoff_status` | JSON snapshot of current handoff state |
 | `handoff_history` | JSON list of archived handoff states |
@@ -192,7 +194,7 @@ Written to `.agent-co-op/` in the **user's project directory** (not in this repo
 | File | Purpose | Git |
 |------|---------|-----|
 | `<project-id>.json` | Project manifest with role notes and overrides | Commit |
-| `handoff-state.json` | Machine-readable state (phase, objective, next_steps) | Ignore (via `init`) |
+| `handoff-state.json` | Machine-readable state (phase, objective, context, next_steps) | Ignore (via `init`) |
 | `handoff.md` | Human-readable summary | Ignore (via `init`) |
 | `CURRENT_HANDOFF.md` | Published pickup file — paste into any IDE | Ignore (via `init`) |
 | `handoff-history/` | Archived prior handoff states (JSON + markdown) | Ignore (via `init`) |
@@ -229,7 +231,11 @@ agent-co-op pickup
 # 5. Check state without generating a full prompt
 agent-co-op handoff status
 
-# 5b. Review prior handoffs after republishing
+# 5b. Mark a next step done and add a follow-up without republishing
+agent-co-op handoff update --next-steps "Deploy to staging" "Monitor logs"
+agent-co-op handoff update --context "JWT middleware merged; refresh flow still TODO"
+
+# 5c. Review prior handoffs after republishing
 agent-co-op handoff history
 agent-co-op handoff history --limit 3 --json
 
@@ -264,6 +270,7 @@ tests/
   test_handoff.py
   test_handoff_history.py
   test_handoff_status.py
+  test_handoff_update.py
   test_pickup.py
   test_projects.py
   test_manifest.py
