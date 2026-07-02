@@ -1,0 +1,34 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "agent-co-op-mcp"
+version = "0.1.0"
+description = "Cross-IDE agent handoff — pickup prompts, role routing, work modes, and a local Python MCP server"
+readme = "README.md"
+license = { file = "LICENSE" }
+requires-python = ">=3.10"
+dependencies = [
+    "mcp>=1.0.0",
+]
+
+[project.scripts]
+agent-co-op = "agent_co_op.cli:main"
+agent-co-op-mcp = "agent_co_op.mcp_server:main"
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "ruff>=0.1.0",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 88
+target-version = "py310"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/agent_co_op"]

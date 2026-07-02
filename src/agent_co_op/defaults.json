@@ -1,0 +1,99 @@
+{
+  "work_modes": {
+    "background": {
+      "description": "Throughput — run scripts, verify, resume; minimal reads",
+      "context": [
+        "Rely on existing handoff state for orientation",
+        "Skip broad codebase reads; act on what you already know",
+        "Focus on executing tasks and verifying results"
+      ],
+      "tools": [
+        "Run terminal commands to execute and verify",
+        "Write files only as needed by the task",
+        "Search files when a specific location is unknown"
+      ]
+    },
+    "think": {
+      "description": "Token-sensitive planning — bootstrap before reads; narrow context",
+      "context": [
+        "Bootstrap from handoff state before reading any files",
+        "Read only the files strictly required for the planning decision",
+        "Keep context narrow; prefer summaries over full file reads"
+      ],
+      "tools": [
+        "Read files sparingly and targeted",
+        "Search for specific symbols or patterns, not broad sweeps",
+        "Avoid executing commands during planning"
+      ]
+    },
+    "longContext": {
+      "description": "Scouting/orientation — large handoff docs and path indexes OK",
+      "context": [
+        "Read broadly to orient yourself in the codebase",
+        "Handoff docs, README, and directory listings are all fair game",
+        "Build a mental model before writing any code"
+      ],
+      "tools": [
+        "List directories and read multiple files freely",
+        "Index file paths and module structure",
+        "Use search to map relationships between modules"
+      ]
+    },
+    "default": {
+      "description": "Capable implementation loop — balanced reads and writes",
+      "context": [
+        "Follow the current handoff phase and objectives",
+        "Read files as needed to understand context",
+        "Implement with awareness of surrounding code"
+      ],
+      "tools": [
+        "Read files before editing them",
+        "Write and edit files to implement the objective",
+        "Run commands to validate your changes"
+      ]
+    }
+  },
+  "role_work_modes": {
+    "scaffold": "longContext",
+    "planner": "default",
+    "verifier": "background",
+    "efficiency": "background",
+    "resume": "background"
+  },
+  "phase_work_mode_overrides": {
+    "plan": {
+      "planner": "think"
+    },
+    "implement": {
+      "verifier": "background"
+    },
+    "verify": {
+      "verifier": "background"
+    },
+    "resume": {
+      "resume": "background"
+    }
+  },
+  "defaults": {
+    "scaffold": {
+      "agent": "claude",
+      "model_tier": "high"
+    },
+    "planner": {
+      "agent": "claude",
+      "model_tier": "high"
+    },
+    "verifier": {
+      "agent": "cursor",
+      "model_tier": "medium"
+    },
+    "efficiency": {
+      "agent": "copilot",
+      "model_tier": "low"
+    },
+    "resume": {
+      "agent": "claude",
+      "model_tier": "medium"
+    }
+  }
+}

@@ -1,0 +1,147 @@
+"""CLI entry point for agent-co-op."""
+
+from __future__ import annotations
+
+import argparse
+import json
+import sys
+
+from . import handoff, projects
+from .routing import VALID_PHASES, VALID_ROLES, phase_to_role, resolve_routing
+
+
+def cmd_pickup(args: argparse.Namespace) -> int:
+    if args.list:
+        state = handoff.read_state()
+        if state is None:
+            print("No handoff state found.", file=sys.stderr)
+            return 1
+        print(json.dumps(state, indent=2))
+        return 0
+    try:
+        result = projects.pickup(project_id=args.project or None)
+        print(result)
+        return 0
+    except FileNotFoundError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 1
+
+
+def cmd_role_prompt(args: argparse.Namespace) -> int:
+    try:
+        result = projects.role_prompt(args.project_id, args.role, phase=args.phase)
+        print(result)
+        return 0
+    except (ValueError, FileNotFoundError) as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 1
+
+
+def cmd_routing_show(args: argparse.Namespace) -> int:
+    try:
+        phase: str | None = getattr(args, "phase", None)
+        role = phase_to_role(phase) if phase else "planner"
+        info = resolve_routing(role, phase=phase, project_id=args.project_id)
+        print(json.dumps(info, indent=2))
+        return 0
+    except ValueError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 1
+
+
+def cmd_handoff_publish(args: argparse.Namespace) -> int:
+    steps: list[str] = args.next_steps or []
+    try:
+        handoff.publish(
+            args.objective, args.phase, args.project, next_steps=steps or None
+        )
+        print(f"Handoff published for {args.project} / {args.phase}.")
+        return 0
+    except (ValueError, OSError) as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 1
+
+
+def cmd_handoff_clear(args: argparse.Namespace) -> int:
+    handoff.clear()
+    print("Handoff files cleared.")
+    return 0
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        prog="agent-co-op",
+        description=(
+            "Cross-IDE agent handoff — pickup prompts, role routing, work modes."
+        ),
+    )
+    sub = parser.add_subparsers(dest="command", required=True)
+
+    # pickup
+    p_pickup = sub.add_parser(
+        "pickup", help="Generate pickup prompt from handoff state."
+    )
+    p_pickup.add_argument("--project", metavar="ID", help="Project ID override.")
+    p_pickup.add_argument(
+        "--list",
+        action="store_true",
+        help="Print current handoff state as JSON instead of the prompt.",
+    )
+    p_pickup.set_defaults(func=cmd_pickup)
+
+    # role-prompt
+    p_rp = sub.add_parser("role-prompt", help="Generate a role-prompt for an agent.")
+    p_rp.add_argument("project_id", help="Project ID.")
+    p_rp.add_argument(
+        "--role", required=True, choices=sorted(VALID_ROLES), help="Role name."
+    )
+    p_rp.add_argument(
+        "--phase", choices=sorted(VALID_PHASES), help="Optional phase override."
+    )
+    p_rp.set_defaults(func=cmd_role_prompt)
+
+    # routing
+    p_routing = sub.add_parser("routing", help="Routing commands.")
+    routing_sub = p_routing.add_subparsers(dest="routing_command", required=True)
+    p_rs = routing_sub.add_parser("show", help="Show routing info for a project.")
+    p_rs.add_argument("project_id", help="Project ID.")
+    p_rs.add_argument(
+        "--phase", choices=sorted(VALID_PHASES), help="Optional phase."
+    )
+    p_rs.set_defaults(func=cmd_routing_show)
+
+    # handoff
+    p_handoff = sub.add_parser("handoff", help="Handoff commands.")
+    handoff_sub = p_handoff.add_subparsers(dest="handoff_command", required=True)
+
+    p_hp = handoff_sub.add_parser("publish", help="Publish a handoff state.")
+    p_hp.add_argument("--objective", required=True, help="Session objective.")
+    p_hp.add_argument(
+        "--phase",
+        required=True,
+        choices=sorted(VALID_PHASES),
+        help="Current phase.",
+    )
+    p_hp.add_argument("--project", required=True, metavar="ID", help="Project ID.")
+    p_hp.add_argument(
+        "--next-steps",
+        nargs="*",
+        metavar="STEP",
+        help="One or more next steps.",
+    )
+    p_hp.set_defaults(func=cmd_handoff_publish)
+
+    p_hc = handoff_sub.add_parser("clear", help="Clear all handoff files.")
+    p_hc.set_defaults(func=cmd_handoff_clear)
+
+    return parser
+
+
+def main() -> None:
+    parser = build_parser()
+    args = parser.parse_args()
+    sys.exit(args.func(args))
+
+
+if __name__ == "__main__":
+    main()
