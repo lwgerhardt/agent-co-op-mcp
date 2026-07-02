@@ -9,17 +9,110 @@ from typing import Any
 from .routing import resolve_routing, phase_to_role
 
 
+def _handoff_dir(base: Path | None = None) -> Path:
+    return (base or Path.cwd()) / ".agent-co-op"
+
+
 def load_project(project_id: str, base: Path | None = None) -> dict[str, Any] | None:
     """Load a project manifest from .agent-co-op/.
 
     Looks for <project_id>.json then project.json under <base>/.agent-co-op/.
     Returns None if no manifest is found.
     """
-    d = (base or Path.cwd()) / ".agent-co-op"
+    d = _handoff_dir(base)
     for candidate in (d / f"{project_id}.json", d / "project.json"):
         if candidate.exists():
             return json.loads(candidate.read_text(encoding="utf-8"))
     return None
+
+
+def init_project(
+    project_id: str,
+    name: str | None = None,
+    description: str = "",
+    repository: str = "",
+    base: Path | None = None,
+) -> Path:
+    """Create a starter project manifest under .agent-co-op/<project_id>.json."""
+    d = _handoff_dir(base)
+    d.mkdir(parents=True, exist_ok=True)
+    manifest_path = d / f"{project_id}.json"
+    if manifest_path.exists():
+        raise FileExistsError(f"Project manifest already exists: {manifest_path}")
+
+    manifest: dict[str, Any] = {
+        "id": project_id,
+        "name": name or project_id,
+        "description": description,
+        "repository": repository,
+        "roles": {
+            "planner": {
+                "notes": "Bootstrap from handoff state before broad reads"
+            },
+            "verifier": {
+                "notes": "Run tests and verify acceptance criteria before marking done"
+            },
+            "scaffold": {
+                "notes": "Use the project README and directory layout for orientation"
+            },
+        },
+    }
+    manifest_path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+    return manifest_path
+
+
+def project_summary(project_id: str, base: Path | None = None) -> dict[str, Any]:
+    """Return project manifest metadata and configured roles."""
+    project = load_project(project_id, base=base)
+    if project is None:
+        raise FileNotFoundError(
+            f"No project manifest found for {project_id!r}. "
+            f"Run 'agent-co-op project init {project_id}' first."
+        )
+    roles = project.get("roles", {})
+    return {
+        "id": project.get("id", project_id),
+        "name": project.get("name", project_id),
+        "description": project.get("description", ""),
+        "repository": project.get("repository", ""),
+        "roles": sorted(roles.keys()) if isinstance(roles, dict) else [],
+        "manifest_path": str(_handoff_dir(base) / f"{project_id}.json"),
+    }
+
+
+def _role_notes(project: dict[str, Any] | None, role: str) -> str | None:
+    if project is None:
+        return None
+    roles = project.get("roles", {})
+    if not isinstance(roles, dict):
+        return None
+    role_config = roles.get(role, {})
+    if not isinstance(role_config, dict):
+        return None
+    notes = role_config.get("notes")
+    return notes if isinstance(notes, str) and notes.strip() else None
+
+
+def _append_project_context(
+    lines: list[str],
+    project: dict[str, Any] | None,
+    project_id: str,
+) -> None:
+    if project is None:
+        return
+    section: list[str] = []
+    name = project.get("name")
+    if isinstance(name, str) and name.strip():
+        section.append(f"**Name:** {name}")
+    description = project.get("description")
+    if isinstance(description, str) and description.strip():
+        section.append(f"**Description:** {description}")
+    repository = project.get("repository")
+    if isinstance(repository, str) and repository.strip():
+        section.append(f"**Repository:** {repository}")
+    if not section:
+        section.append(f"**ID:** {project_id}")
+    lines += ["", "## Project", *section]
 
 
 def role_prompt(
@@ -37,7 +130,10 @@ def role_prompt(
     """
     from .handoff import read_state
 
-    routing = resolve_routing(role, phase=phase, project_id=project_id)
+    project = load_project(project_id, base=base)
+    routing = resolve_routing(
+        role, phase=phase, project_id=project_id, base=base
+    )
     state = read_state(base)
 
     lines: list[str] = [
@@ -50,6 +146,10 @@ def role_prompt(
     ]
     if phase:
         lines.append(f"**Phase:** {phase}")
+    _append_project_context(lines, project, project_id)
+    role_notes = _role_notes(project, role)
+    if role_notes:
+        lines += ["", "## Role notes", role_notes]
     lines += ["", "## Context discipline"]
     for bullet in routing["context_discipline"]:
         lines.append(f"- {bullet}")

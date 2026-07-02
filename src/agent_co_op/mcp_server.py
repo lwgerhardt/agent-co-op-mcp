@@ -49,6 +49,18 @@ def handoff_clear() -> str:
 
 
 @mcp.tool()
+def handoff_status() -> str:
+    """Return the current handoff state as JSON."""
+    return json.dumps(_handoff.handoff_status(), indent=2)
+
+
+@mcp.tool()
+def project_show(project_id: str) -> str:
+    """Show project manifest metadata and configured roles."""
+    return json.dumps(_projects.project_summary(project_id), indent=2)
+
+
+@mcp.tool()
 def routing_show(project_id: str, phase: str = "") -> str:
     """Show routing info for a project and optional phase."""
     p: str | None = phase or None
