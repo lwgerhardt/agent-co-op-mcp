@@ -118,6 +118,31 @@ def cmd_project_init(args: argparse.Namespace) -> int:
         return 1
 
 
+def cmd_init(args: argparse.Namespace) -> int:
+    try:
+        result = projects.init_workspace(
+            args.project_id,
+            name=args.name,
+            description=args.description or "",
+            repository=args.repository,
+            update_gitignore=not args.no_gitignore,
+        )
+        print(f"Initialized agent-co-op for {args.project_id}.")
+        print(f"Project manifest: {result['manifest_path']}")
+        if result["gitignore_updated"]:
+            print("Updated .gitignore with handoff-state entries.")
+        print("\nNext steps:")
+        for command in result["next_commands"]:
+            print(f"  {command}")
+        return 0
+    except FileExistsError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 1
+    except OSError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 1
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="agent-co-op",
@@ -126,6 +151,25 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     sub = parser.add_subparsers(dest="command", required=True)
+
+    # init (workspace bootstrap)
+    p_init = sub.add_parser(
+        "init",
+        help="Bootstrap .agent-co-op in the current project directory.",
+    )
+    p_init.add_argument("project_id", help="Project ID.")
+    p_init.add_argument("--name", help="Human-readable project name.")
+    p_init.add_argument("--description", help="Short project description.")
+    p_init.add_argument(
+        "--repository",
+        help="Repository URL (defaults to git remote origin when available).",
+    )
+    p_init.add_argument(
+        "--no-gitignore",
+        action="store_true",
+        help="Do not append handoff-state entries to .gitignore.",
+    )
+    p_init.set_defaults(func=cmd_init)
 
     # pickup
     p_pickup = sub.add_parser(

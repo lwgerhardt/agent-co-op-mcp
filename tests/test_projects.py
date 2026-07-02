@@ -10,6 +10,7 @@ import pytest
 from agent_co_op.handoff import publish
 from agent_co_op.projects import (
     init_project,
+    init_workspace,
     load_project,
     pickup,
     project_summary,
@@ -63,6 +64,36 @@ class TestInitProject:
         init_project("my-app", base=tmp_path)
         with pytest.raises(FileExistsError):
             init_project("my-app", base=tmp_path)
+
+
+class TestInitWorkspace:
+    def test_creates_manifest(self, tmp_path: Path) -> None:
+        result = init_workspace("my-app", name="My App", base=tmp_path)
+        assert (tmp_path / ".agent-co-op" / "my-app.json").exists()
+        assert result["project_id"] == "my-app"
+        assert len(result["next_commands"]) == 3
+
+    def test_updates_gitignore(self, tmp_path: Path) -> None:
+        result = init_workspace("my-app", base=tmp_path)
+        assert result["gitignore_updated"] is True
+        gitignore = (tmp_path / ".gitignore").read_text(encoding="utf-8")
+        assert ".agent-co-op/handoff-state.json" in gitignore
+        assert "# agent-co-op handoff state" in gitignore
+
+    def test_skips_gitignore_when_disabled(self, tmp_path: Path) -> None:
+        result = init_workspace("my-app", update_gitignore=False, base=tmp_path)
+        assert result["gitignore_updated"] is False
+        assert not (tmp_path / ".gitignore").exists()
+
+    def test_gitignore_is_idempotent(self, tmp_path: Path) -> None:
+        init_workspace("my-app", base=tmp_path)
+        result = init_workspace("other-app", base=tmp_path)
+        assert result["gitignore_updated"] is False
+
+    def test_refuses_duplicate_manifest(self, tmp_path: Path) -> None:
+        init_workspace("my-app", base=tmp_path)
+        with pytest.raises(FileExistsError):
+            init_workspace("my-app", base=tmp_path)
 
 
 class TestProjectSummary:

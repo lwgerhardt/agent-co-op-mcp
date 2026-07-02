@@ -15,7 +15,10 @@ Solo developers using multiple AI coding agents (Cursor, Claude Code, VS Code Co
 ```bash
 pip install -e .
 
-# Publish a handoff state from your project directory
+# Bootstrap agent-co-op in your project directory
+agent-co-op init my-saas --name "My SaaS App"
+
+# Publish a handoff state
 agent-co-op handoff publish \
   --objective "Add JWT authentication" \
   --phase implement \
@@ -26,11 +29,16 @@ agent-co-op handoff publish \
 agent-co-op pickup
 ```
 
+`init` creates `.agent-co-op/<project-id>.json` and appends handoff-state entries to `.gitignore` (use `--no-gitignore` to skip). It auto-detects `git remote get-url origin` for the manifest repository field when available.
+
 ---
 
 ## CLI reference
 
 ```bash
+# Bootstrap .agent-co-op in the current directory
+agent-co-op init <project-id> [--name NAME] [--description TEXT] [--repository URL] [--no-gitignore]
+
 # Generate pickup prompt from current handoff state
 agent-co-op pickup [--project ID] [--list]
 
@@ -40,22 +48,43 @@ agent-co-op role-prompt <project-id> --role <role> [--phase plan|implement|verif
 # Show routing info for a project
 agent-co-op routing show <project-id> [--phase plan|implement|verify|resume]
 
-# Publish a handoff state
+# Publish, inspect, or clear handoff state
 agent-co-op handoff publish --objective "..." --phase implement --project <id> [--next-steps STEP ...]
-
-# Clear all handoff files
+agent-co-op handoff status [--json]
 agent-co-op handoff clear
+
+# Manage project manifests
+agent-co-op project init <project-id> [--name NAME] [--description TEXT] [--repository URL]
+agent-co-op project show <project-id>
 ```
 
 **Roles:** `scaffold`, `planner`, `verifier`, `efficiency`, `resume`
 
 **Phases:** `plan`, `implement`, `verify`, `resume`
 
+Use `init` for first-time setup in a repo. Use `project init` when you only need the manifest file without gitignore changes.
+
+---
+
+## Project manifests
+
+Each project can have a manifest at `.agent-co-op/<project-id>.json` (or `.agent-co-op/project.json` as a fallback). Manifests are merged into routing and pickup prompts:
+
+| Field | Purpose |
+|-------|---------|
+| `id`, `name`, `description`, `repository` | Shown in pickup/role prompts |
+| `roles.<role>.notes` | Role-specific guidance in prompts |
+| `roles.<role>.agent` | Override default agent hint |
+| `roles.<role>.model_tier` | Override default model tier |
+| `roles.<role>.work_mode` | Override work mode for that role |
+
+See `examples/project.example.json` for a full example.
+
 ---
 
 ## MCP server setup
 
-The MCP server (`agent-co-op-mcp`) exposes the same five operations over stdio so any IDE with MCP support can call them without shell copy-paste.
+The MCP server (`agent-co-op-mcp`) exposes CLI operations over stdio so any IDE with MCP support can call them without shell copy-paste.
 
 ### Cursor
 
@@ -115,6 +144,9 @@ Add to `.vscode/mcp.json` (VS Code 1.99+):
 | `handoff_role_prompt` | Role-prompt for a specific project/role/phase |
 | `handoff_publish` | Write new handoff state files |
 | `handoff_clear` | Delete all handoff files |
+| `handoff_status` | JSON snapshot of current handoff state |
+| `project_init` | Create project manifest and optional gitignore entries |
+| `project_show` | Show project manifest summary |
 | `routing_show` | Show routing config for a project and phase |
 
 ---
@@ -145,17 +177,21 @@ Phase overrides take precedence over the role default:
 
 Written to `.agent-co-op/` in the **user's project directory** (not in this repo):
 
-| File | Purpose |
-|------|---------|
-| `handoff-state.json` | Machine-readable state (phase, objective, project_id, next_steps) |
-| `handoff.md` | Human-readable summary |
-| `CURRENT_HANDOFF.md` | Published pickup file — paste this into any IDE to resume |
+| File | Purpose | Git |
+|------|---------|-----|
+| `<project-id>.json` | Project manifest with role notes and overrides | Commit |
+| `handoff-state.json` | Machine-readable state (phase, objective, next_steps) | Ignore (via `init`) |
+| `handoff.md` | Human-readable summary | Ignore (via `init`) |
+| `CURRENT_HANDOFF.md` | Published pickup file — paste into any IDE | Ignore (via `init`) |
 
 ---
 
 ## Example workflow
 
 ```bash
+# 0. First-time setup in your repo
+agent-co-op init my-saas --name "My SaaS App"
+
 # 1. Start planning
 agent-co-op handoff publish \
   --objective "Design the JWT auth system" \
@@ -164,7 +200,7 @@ agent-co-op handoff publish \
 
 # 2. Switch to Claude Code — paste the pickup prompt
 agent-co-op pickup
-# → Role: planner | Work mode: think | ...
+# → Role: planner | Work mode: think | Project: My SaaS App | ...
 
 # 3. Planning done — hand off to implementation
 agent-co-op handoff publish \
@@ -177,13 +213,16 @@ agent-co-op handoff publish \
 agent-co-op pickup
 # → Role: verifier | Work mode: background | Next steps: ...
 
-# 5. Implementation done — verify
+# 5. Check state without generating a full prompt
+agent-co-op handoff status
+
+# 6. Implementation done — verify
 agent-co-op handoff publish \
   --objective "Verify JWT auth end-to-end" \
   --phase verify \
   --project my-saas
 
-# 6. All done — clear
+# 7. All done — clear
 agent-co-op handoff clear
 ```
 
@@ -192,18 +231,22 @@ agent-co-op handoff clear
 ## Repository layout
 
 ```
+.github/workflows/ci.yml   # pytest + ruff on Python 3.10–3.12
 src/agent_co_op/
   __init__.py
   routing.py          # roles, work modes, phase→role, resolve routing
   handoff.py          # capture/publish/clear handoff markdown + JSON
-  projects.py         # project manifests, role-prompt, pickup logic
+  projects.py         # manifests, init workspace, role-prompt, pickup
   defaults.json       # routing + work_modes config
   cli.py              # CLI entry point (agent-co-op)
   mcp_server.py       # stdio MCP server (agent-co-op-mcp)
 tests/
   test_routing.py
   test_handoff.py
+  test_handoff_status.py
   test_pickup.py
+  test_projects.py
+  test_cli.py
 examples/
   project.example.json
   handoff-state.example.json
@@ -217,8 +260,10 @@ examples/
 ```bash
 pip install -e ".[dev]"
 pytest
-ruff check src/
+ruff check src/ tests/
 ```
+
+CI runs on every push and pull request to `main` (see `.github/workflows/ci.yml`).
 
 ---
 
