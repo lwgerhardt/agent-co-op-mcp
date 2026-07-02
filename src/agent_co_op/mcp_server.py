@@ -9,6 +9,7 @@ import json
 import os
 import sys
 from pathlib import Path
+from typing import Any
 
 from mcp.server.fastmcp import FastMCP
 
@@ -25,6 +26,27 @@ def _resolve_base(workspace_path: str = "") -> Path | None:
         return Path(workspace_path)
     if env_root := os.environ.get("AGENT_CO_OP_ROOT"):
         return Path(env_root)
+    return None
+
+
+def _normalize_context(value: Any) -> str | dict[str, Any] | None:
+    """Accept plain text or structured v2 context from MCP callers."""
+    if value is None or value == "":
+        return None
+    if isinstance(value, dict):
+        return value
+    if isinstance(value, str):
+        stripped = value.strip()
+        if not stripped:
+            return None
+        if stripped.startswith("{"):
+            try:
+                parsed = json.loads(stripped)
+            except json.JSONDecodeError:
+                return stripped
+            if isinstance(parsed, dict):
+                return parsed
+        return stripped
     return None
 
 
@@ -248,7 +270,7 @@ def handoff_publish_for_verifier(
     project_id: str,
     profile_id: str = "default",
     next_steps: list[str] | None = None,
-    context: str = "",
+    context: Any = None,
     workspace_path: str = "",
 ) -> str:
     """Publish implement-phase handoff and write verification queue."""
@@ -260,7 +282,7 @@ def handoff_publish_for_verifier(
             project_id,
             profile_id=profile_id,
             next_steps=next_steps or None,
-            context=context or None,
+            context=_normalize_context(context),
             base=_resolve_base(workspace_path),
         )
     except (FileNotFoundError, _verification.VerificationError) as exc:

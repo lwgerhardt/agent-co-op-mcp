@@ -225,7 +225,8 @@ def run_verification(
     if queue is None:
         raise FileNotFoundError(
             "No verification queue found. Run "
-            "'agent-co-op verify init' or 'handoff publish-for-verifier' first."
+            "'agent-co-op handoff publish-for-verifier' or create "
+            ".agent-co-op/verification-queue.json first."
         )
 
     started_at = datetime.now(timezone.utc).isoformat()
