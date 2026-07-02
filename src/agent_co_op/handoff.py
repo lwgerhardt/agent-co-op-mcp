@@ -279,6 +279,10 @@ def restore(entry_id: str, base: Path | None = None) -> dict[str, Any]:
     if isinstance(context, str) and context.strip():
         state["context"] = context.strip()
 
+    git_snapshot = _capture_git_snapshot(base)
+    if git_snapshot is not None:
+        state["git"] = git_snapshot
+
     _write_handoff_files(state, base=base)
     return state
 
@@ -317,6 +321,10 @@ def publish(
     }
     if context:
         state["context"] = context
+
+    git_snapshot = _capture_git_snapshot(base)
+    if git_snapshot is not None:
+        state["git"] = git_snapshot
 
     _write_handoff_files(state, base=base)
 
@@ -411,6 +419,9 @@ def update(
             state.pop("context", None)
 
     state["updated_at"] = datetime.now(timezone.utc).isoformat()
+    git_snapshot = _capture_git_snapshot(base)
+    if git_snapshot is not None:
+        state["git"] = git_snapshot
     _write_handoff_files(state, base=base)
     return state
 
@@ -427,6 +438,9 @@ def _render_handoff_md(state: dict[str, Any], routing: dict[str, Any]) -> str:
     handoff_context = state.get("context")
     if isinstance(handoff_context, str) and handoff_context.strip():
         lines += ["", "## Handoff context", handoff_context.strip()]
+    git_block = state.get("git")
+    if isinstance(git_block, dict):
+        lines += _format_git_lines(git_block)
     lines += ["", "## Context discipline"]
     for bullet in routing["context_discipline"]:
         lines.append(f"- {bullet}")
@@ -459,15 +473,91 @@ def clear(base: Path | None = None) -> None:
             p.unlink()
 
 
+def _handoff_paths(base: Path | None = None) -> dict[str, str]:
+    d = _handoff_dir(base)
+    return {
+        "state_json": str(d / "handoff-state.json"),
+        "handoff_md": str(d / "handoff.md"),
+        "published_md": str(d / "CURRENT_HANDOFF.md"),
+        "history_dir": str(_history_dir(base)),
+    }
+
+
+def _capture_git_snapshot(base: Path | None = None) -> dict[str, Any] | None:
+    from .git_snapshot import capture_git_snapshot
+
+    return capture_git_snapshot(base)
+
+
+def _format_git_lines(git: dict[str, Any]) -> list[str]:
+    from .git_snapshot import format_git_section_lines
+
+    return format_git_section_lines(git)
+
+
+def _stale_warning(
+    published_at: str | None, days: int = 7
+) -> str | None:
+    if not published_at:
+        return None
+    try:
+        dt = datetime.fromisoformat(published_at)
+    except ValueError:
+        return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    age = datetime.now(timezone.utc) - dt.astimezone(timezone.utc)
+    if age.days >= days:
+        return f"handoff older than {days} days"
+    return None
+
+
+def _branch_mismatch_warning(
+    state: dict[str, Any], base: Path | None = None
+) -> str | None:
+    from .git_snapshot import current_branch
+
+    git_block = state.get("git")
+    if not isinstance(git_block, dict):
+        return None
+    stored_branch = git_block.get("branch")
+    if not isinstance(stored_branch, str) or not stored_branch:
+        return None
+    current = current_branch(base)
+    if not current or current == stored_branch:
+        return None
+    return (
+        f"Handoff was published on branch {stored_branch!r} but current branch is "
+        f"{current!r}. Run: git checkout {stored_branch}"
+    )
+
+
 def handoff_status(base: Path | None = None) -> dict[str, Any]:
     """Return current handoff state plus whether a pickup prompt is available."""
     state = read_state(base)
     current = read_current_handoff(base)
-    return {
+    active = state is not None and current is not None
+    result: dict[str, Any] = {
+        "active": active,
         "has_state": state is not None,
         "has_current_handoff": current is not None,
         "state": state,
+        "paths": _handoff_paths(base),
     }
+    if state is not None:
+        published_at = state.get("published_at")
+        if isinstance(published_at, str):
+            result["created_at"] = published_at
+            stale = _stale_warning(published_at)
+            if stale:
+                result["stale_warning"] = stale
+        branch_warning = _branch_mismatch_warning(state, base)
+        if branch_warning:
+            result["branch_mismatch_warning"] = branch_warning
+        for key in ("phase", "objective", "project_id", "role"):
+            if key in state:
+                result[key] = state[key]
+    return result
 
 
 def read_state(base: Path | None = None) -> dict[str, Any] | None:
