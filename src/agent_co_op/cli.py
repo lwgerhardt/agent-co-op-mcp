@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from pathlib import Path
 
 from . import handoff, projects
 from .routing import VALID_PHASES, VALID_ROLES, phase_to_role, resolve_routing
@@ -116,6 +117,48 @@ def cmd_project_init(args: argparse.Namespace) -> int:
     except OSError as exc:
         print(f"Error: {exc}", file=sys.stderr)
         return 1
+
+
+def cmd_project_validate(args: argparse.Namespace) -> int:
+    from .manifest import validate_manifest_file
+
+    if args.file and args.project_id:
+        print("Error: specify either project_id or --file, not both.", file=sys.stderr)
+        return 2
+    if not args.file and not args.project_id:
+        print("Error: project_id or --file is required.", file=sys.stderr)
+        return 2
+
+    try:
+        if args.file:
+            report = validate_manifest_file(
+                Path(args.file),
+                expected_id=args.expected_id,
+            )
+        else:
+            report = projects.validate_project(args.project_id)
+            report["project_id"] = args.project_id
+    except FileNotFoundError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 1
+    except ValueError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 1
+
+    if args.file:
+        report.setdefault("project_id", report.get("id"))
+
+    if args.json:
+        print(json.dumps(report, indent=2))
+    elif report["valid"]:
+        print(f"Manifest valid: {report['manifest_path']}")
+        if report["roles"]:
+            print(f"Roles: {', '.join(report['roles'])}")
+    else:
+        print(f"Manifest invalid: {report['manifest_path']}", file=sys.stderr)
+        for error in report["errors"]:
+            print(f"  - {error}", file=sys.stderr)
+    return 0 if report["valid"] else 1
 
 
 def cmd_init(args: argparse.Namespace) -> int:
@@ -250,6 +293,29 @@ def build_parser() -> argparse.ArgumentParser:
     p_pi.add_argument("--description", help="Short project description.")
     p_pi.add_argument("--repository", help="Repository URL.")
     p_pi.set_defaults(func=cmd_project_init)
+
+    p_pv = project_sub.add_parser("validate", help="Validate a project manifest.")
+    p_pv.add_argument(
+        "project_id",
+        nargs="?",
+        help="Project ID to validate under .agent-co-op/.",
+    )
+    p_pv.add_argument(
+        "--file",
+        metavar="PATH",
+        help="Validate a manifest JSON file directly.",
+    )
+    p_pv.add_argument(
+        "--expected-id",
+        metavar="ID",
+        help="Expected manifest id when using --file.",
+    )
+    p_pv.add_argument(
+        "--json",
+        action="store_true",
+        help="Print the validation report as JSON.",
+    )
+    p_pv.set_defaults(func=cmd_project_validate)
 
     return parser
 
