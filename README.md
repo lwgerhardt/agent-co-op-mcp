@@ -165,6 +165,17 @@ Add to `.vscode/mcp.json` (VS Code 1.99+):
 | `project_show` | Show project manifest summary |
 | `routing_show` | Show routing config for a project and phase |
 
+### MCP resources
+
+| URI | Content |
+|-----|---------|
+| `handoff://status` | Compact JSON status (phase, objective, staleness, paths) |
+| `handoff://current` | Rendered `CURRENT_HANDOFF.md` |
+| `handoff://state` | Full `handoff-state.json` |
+
+See `docs/design-alignment.md` for mapping to the LOA handoff proposal and
+`.cursor/skills/agent-handoff/SKILL.md` for agent workflows.
+
 ---
 
 ## Work modes
@@ -285,6 +296,10 @@ examples/
   project.example.json
   handoff-state.example.json
   CURRENT_HANDOFF.example.md
+docs/
+  design-alignment.md   # LOA proposal ↔ agent-co-op mapping
+.cursor/skills/agent-handoff/
+  SKILL.md              # Resume / publish / verify workflows
 ```
 
 ---

@@ -17,6 +17,30 @@ from .routing import phase_to_role, resolve_routing
 mcp = FastMCP("agent-co-op")
 
 
+@mcp.resource("handoff://status")
+def resource_handoff_status() -> str:
+    """Compact JSON status of the current handoff."""
+    return json.dumps(_handoff.handoff_status(), indent=2)
+
+
+@mcp.resource("handoff://current")
+def resource_handoff_current() -> str:
+    """Rendered CURRENT_HANDOFF.md for the active handoff."""
+    current = _handoff.read_current_handoff()
+    if current is None:
+        return json.dumps({"error": "No active handoff."})
+    return current
+
+
+@mcp.resource("handoff://state")
+def resource_handoff_state() -> str:
+    """Full handoff-state.json contents."""
+    state = _handoff.read_state()
+    if state is None:
+        return json.dumps({"error": "No handoff state."})
+    return json.dumps(state, indent=2)
+
+
 @mcp.tool()
 def handoff_pickup(project_id: str = "") -> str:
     """Return a paste-ready pickup prompt for the current handoff state."""
