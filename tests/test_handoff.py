@@ -98,6 +98,23 @@ class TestReadState:
         result = read_state(tmp_path)
         assert isinstance(result, dict)
 
+    def test_corrupt_state_raises_value_error(self, tmp_path: Path) -> None:
+        d = tmp_path / ".agent-co-op"
+        d.mkdir(parents=True)
+        (d / "handoff-state.json").write_text("{not json", encoding="utf-8")
+        with pytest.raises(ValueError, match="Corrupted handoff state"):
+            read_state(tmp_path)
+
+
+class TestAtomicWrites:
+    def test_publish_leaves_no_temp_files(self, tmp_path: Path) -> None:
+        publish("Build feature", "implement", "my-app", base=tmp_path)
+        handoff_dir = tmp_path / ".agent-co-op"
+        assert list(handoff_dir.glob(".tmp-*")) == []
+        assert (handoff_dir / "handoff-state.json").exists()
+        assert (handoff_dir / "handoff.md").exists()
+        assert (handoff_dir / "CURRENT_HANDOFF.md").exists()
+
 
 class TestReadCurrentHandoff:
     def test_returns_none_when_missing(self, tmp_path: Path) -> None:

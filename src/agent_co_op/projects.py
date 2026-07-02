@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 import subprocess
 from pathlib import Path
 from typing import Any
@@ -10,6 +11,7 @@ from typing import Any
 from .routing import resolve_routing, phase_to_role
 
 _HANDOFF_DIRNAME = ".agent-co-op"
+_SAFE_PROJECT_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
 _GITIGNORE_MARKER = "# agent-co-op handoff state"
 _GITIGNORE_ENTRIES = (
     f"{_HANDOFF_DIRNAME}/handoff-state.json",
@@ -21,6 +23,15 @@ _GITIGNORE_ENTRIES = (
 
 def _handoff_dir(base: Path | None = None) -> Path:
     return (base or Path.cwd()) / _HANDOFF_DIRNAME
+
+
+def _validate_project_id(project_id: str) -> None:
+    if not _SAFE_PROJECT_ID.fullmatch(project_id):
+        raise ValueError(
+            f"Invalid project id {project_id!r}. "
+            "Use letters, numbers, dots, underscores, or hyphens; "
+            "must start with a letter or number."
+        )
 
 
 def load_project(project_id: str, base: Path | None = None) -> dict[str, Any] | None:
@@ -37,6 +48,7 @@ def load_project(project_id: str, base: Path | None = None) -> dict[str, Any] | 
 
 def find_manifest_path(project_id: str, base: Path | None = None) -> Path | None:
     """Return the manifest path for a project id, or None if missing."""
+    _validate_project_id(project_id)
     d = _handoff_dir(base)
     for candidate in (d / f"{project_id}.json", d / "project.json"):
         if candidate.exists():
@@ -68,6 +80,7 @@ def init_project(
     base: Path | None = None,
 ) -> Path:
     """Create a starter project manifest under .agent-co-op/<project_id>.json."""
+    _validate_project_id(project_id)
     d = _handoff_dir(base)
     d.mkdir(parents=True, exist_ok=True)
     manifest_path = d / f"{project_id}.json"
@@ -267,7 +280,7 @@ def role_prompt(
     for bullet in routing["tool_discipline"]:
         lines.append(f"- {bullet}")
 
-    if state:
+    if state and state.get("project_id") == project_id:
         lines += [
             "",
             "## Current objective",
@@ -281,6 +294,17 @@ def role_prompt(
             lines += ["", "## Next steps"]
             for step in next_steps:
                 lines.append(f"- {step}")
+    elif state:
+        active_project = state.get("project_id", "unknown")
+        lines += [
+            "",
+            "## Note",
+            (
+                f"Handoff state exists for a different project ({active_project!r}). "
+                "Run 'agent-co-op handoff clear' to reset, or "
+                "'agent-co-op handoff history' to inspect."
+            ),
+        ]
 
     return "\n".join(lines) + "\n"
 
