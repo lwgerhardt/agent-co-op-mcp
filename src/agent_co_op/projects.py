@@ -29,11 +29,35 @@ def load_project(project_id: str, base: Path | None = None) -> dict[str, Any] | 
     Looks for <project_id>.json then project.json under <base>/.agent-co-op/.
     Returns None if no manifest is found.
     """
+    path = find_manifest_path(project_id, base=base)
+    if path is None:
+        return None
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+def find_manifest_path(project_id: str, base: Path | None = None) -> Path | None:
+    """Return the manifest path for a project id, or None if missing."""
     d = _handoff_dir(base)
     for candidate in (d / f"{project_id}.json", d / "project.json"):
         if candidate.exists():
-            return json.loads(candidate.read_text(encoding="utf-8"))
+            return candidate
     return None
+
+
+def validate_project(project_id: str, base: Path | None = None) -> dict[str, Any]:
+    """Validate the manifest for a project id.
+
+    Raises FileNotFoundError when no manifest exists.
+    """
+    from .manifest import validate_manifest_file
+
+    path = find_manifest_path(project_id, base=base)
+    if path is None:
+        raise FileNotFoundError(
+            f"No project manifest found for {project_id!r}. "
+            f"Run 'agent-co-op init {project_id}' first."
+        )
+    return validate_manifest_file(path, expected_id=project_id)
 
 
 def init_project(

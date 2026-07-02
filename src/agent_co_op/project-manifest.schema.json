@@ -1,0 +1,61 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/lwgerhardt/agent-co-op-mcp/project-manifest.schema.json",
+  "title": "agent-co-op project manifest",
+  "type": "object",
+  "required": ["id"],
+  "additionalProperties": false,
+  "properties": {
+    "id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "name": {
+      "type": "string"
+    },
+    "description": {
+      "type": "string"
+    },
+    "repository": {
+      "type": "string"
+    },
+    "roles": {
+      "type": "object",
+      "propertyNames": {
+        "enum": [
+          "scaffold",
+          "planner",
+          "verifier",
+          "efficiency",
+          "resume"
+        ]
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/roleConfig"
+      }
+    }
+  },
+  "$defs": {
+    "roleConfig": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "notes": {
+          "type": "string"
+        },
+        "agent": {
+          "type": "string",
+          "minLength": 1
+        },
+        "model_tier": {
+          "type": "string",
+          "enum": ["low", "medium", "high"]
+        },
+        "work_mode": {
+          "type": "string",
+          "enum": ["background", "think", "longContext", "default"]
+        }
+      }
+    }
+  }
+}

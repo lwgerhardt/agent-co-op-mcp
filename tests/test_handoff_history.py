@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 from agent_co_op.handoff import (
+    _safe_history_stem,
     handoff_history,
     list_history,
     publish,
@@ -70,3 +72,28 @@ class TestHandoffHistoryArchive:
 
     def test_read_history_entry_missing_returns_none(self, tmp_path: Path) -> None:
         assert read_history_entry("missing-entry", base=tmp_path) is None
+
+    def test_read_history_entry_rejects_unsafe_id(self, tmp_path: Path) -> None:
+        publish("Plan auth", "plan", "my-app", base=tmp_path)
+        publish("Implement auth", "implement", "my-app", base=tmp_path)
+        assert read_history_entry("../handoff-state", base=tmp_path) is None
+
+    def test_collision_uses_sequential_suffix(self, tmp_path: Path) -> None:
+        publish("First", "plan", "my-app", base=tmp_path)
+        state = read_state(tmp_path)
+        assert state is not None
+        stem = _safe_history_stem(state["published_at"], "plan")
+
+        history = tmp_path / ".agent-co-op" / "handoff-history"
+        history.mkdir(parents=True, exist_ok=True)
+        (history / f"{stem}.json").write_text(
+            json.dumps({**state, "objective": "Collision"}), encoding="utf-8"
+        )
+        (tmp_path / ".agent-co-op" / "handoff-state.json").write_text(
+            json.dumps({**state, "objective": "To archive"}), encoding="utf-8"
+        )
+
+        publish("Second", "plan", "my-app", base=tmp_path)
+
+        entry_ids = [entry["id"] for entry in list_history(base=tmp_path)]
+        assert f"{stem}-1" in entry_ids

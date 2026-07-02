@@ -10,6 +10,7 @@ from typing import Any
 
 _HANDOFF_DIRNAME = ".agent-co-op"
 _HISTORY_DIRNAME = "handoff-history"
+_SAFE_ENTRY_ID = re.compile(r"^[a-zA-Z0-9_-]+$")
 
 
 def _handoff_dir(base: Path | None = None) -> Path:
@@ -47,11 +48,12 @@ def _archive_current_state(base: Path | None = None) -> str | None:
     history = _history_dir(base)
     history.mkdir(parents=True, exist_ok=True)
 
-    stem = _safe_history_stem(published_at, str(phase))
+    base_stem = _safe_history_stem(published_at, str(phase))
+    stem = base_stem
     suffix = 1
     while (history / f"{stem}.json").exists():
+        stem = f"{base_stem}-{suffix}"
         suffix += 1
-        stem = f"{_safe_history_stem(published_at, str(phase))}-{suffix}"
 
     (history / f"{stem}.json").write_text(
         json.dumps(
@@ -81,18 +83,17 @@ def list_history(
     if not history.exists():
         return []
 
-    entries: list[dict[str, Any]] = []
-    json_paths = list(history.glob("*.json"))
-    json_paths.sort(
-        key=lambda path: json.loads(path.read_text(encoding="utf-8")).get(
-            "archived_at",
-            json.loads(path.read_text(encoding="utf-8")).get("published_at", ""),
-        ),
+    items: list[tuple[str, dict[str, Any]]] = []
+    for json_path in history.glob("*.json"):
+        state = json.loads(json_path.read_text(encoding="utf-8"))
+        items.append((json_path.stem, state))
+    items.sort(
+        key=lambda item: item[1].get("archived_at", item[1].get("published_at", "")),
         reverse=True,
     )
-    for json_path in json_paths:
-        state = json.loads(json_path.read_text(encoding="utf-8"))
-        stem = json_path.stem
+
+    entries: list[dict[str, Any]] = []
+    for stem, state in items:
         md_path = history / f"{stem}.md"
         entries.append(
             {
@@ -114,8 +115,13 @@ def read_history_entry(
     entry_id: str, base: Path | None = None
 ) -> dict[str, Any] | None:
     """Return a single archived handoff entry by id."""
+    if not _SAFE_ENTRY_ID.fullmatch(entry_id):
+        return None
+
     history = _history_dir(base)
-    json_path = history / f"{entry_id}.json"
+    json_path = (history / f"{entry_id}.json").resolve()
+    if not json_path.is_relative_to(history.resolve()):
+        return None
     if not json_path.exists():
         return None
 
