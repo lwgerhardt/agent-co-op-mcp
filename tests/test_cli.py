@@ -7,6 +7,7 @@ from pathlib import Path
 from agent_co_op.cli import (
     build_parser,
     cmd_handoff_history,
+    cmd_handoff_restore,
     cmd_handoff_status,
     cmd_handoff_update,
     cmd_init,
@@ -64,6 +65,15 @@ class TestCliParser:
         )
         assert args.handoff_command == "history"
         assert args.id == "20260702T060000Z_plan"
+
+    def test_handoff_restore_command(self) -> None:
+        parser = build_parser()
+        args = parser.parse_args(
+            ["handoff", "restore", "--id", "20260702T060000Z_plan", "--json"]
+        )
+        assert args.handoff_command == "restore"
+        assert args.id == "20260702T060000Z_plan"
+        assert args.json is True
 
     def test_project_init_command(self) -> None:
         parser = build_parser()
@@ -196,3 +206,18 @@ class TestCliHandlers:
         assert cmd_handoff_update(args) == 0
         captured = capsys.readouterr()
         assert "Handoff updated" in captured.out
+
+    def test_handoff_restore_cli(self, tmp_path: Path, monkeypatch, capsys) -> None:
+        from agent_co_op.handoff import list_history, publish
+
+        monkeypatch.chdir(tmp_path)
+        publish("Plan auth", "plan", "my-app", base=tmp_path)
+        publish("Implement auth", "implement", "my-app", base=tmp_path)
+        entry_id = list_history(base=tmp_path)[-1]["id"]
+
+        parser = build_parser()
+        args = parser.parse_args(["handoff", "restore", "--id", entry_id])
+        assert cmd_handoff_restore(args) == 0
+        captured = capsys.readouterr()
+        assert "Handoff restored" in captured.out
+        assert entry_id in captured.out
