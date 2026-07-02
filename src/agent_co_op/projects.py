@@ -289,6 +289,11 @@ def role_prompt(
         handoff_context = state.get("context")
         if isinstance(handoff_context, str) and handoff_context.strip():
             lines += ["", "## Handoff context", handoff_context.strip()]
+        git_block = state.get("git")
+        if isinstance(git_block, dict):
+            from .git_snapshot import format_git_section_lines
+
+            lines += format_git_section_lines(git_block)
         next_steps: list[str] = state.get("next_steps", [])
         if next_steps:
             lines += ["", "## Next steps"]

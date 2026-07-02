@@ -28,6 +28,45 @@ def _resolve_base(workspace_path: str = "") -> Path | None:
     return None
 
 
+@mcp.resource("handoff://status")
+def resource_handoff_status() -> str:
+    """Compact JSON status of the current handoff."""
+    return json.dumps(_handoff.handoff_status(base=_resolve_base("")), indent=2)
+
+
+@mcp.resource("handoff://current")
+def resource_handoff_current() -> str:
+    """Rendered CURRENT_HANDOFF.md for the active handoff."""
+    current = _handoff.read_current_handoff(base=_resolve_base(""))
+    if current is None:
+        return json.dumps({"error": "No active handoff."})
+    return current
+
+
+@mcp.resource("handoff://state")
+def resource_handoff_state() -> str:
+    """Full handoff-state.json contents."""
+    state = _handoff.read_state(base=_resolve_base(""))
+    if state is None:
+        return json.dumps({"error": "No handoff state."})
+    return json.dumps(state, indent=2)
+
+
+@mcp.resource("handoff://project/{project_id}")
+def resource_handoff_project(project_id: str) -> str:
+    """Project manifest summary JSON."""
+    try:
+        summary = _projects.project_summary(
+            project_id,
+            base=_resolve_base(""),
+        )
+    except FileNotFoundError:
+        return json.dumps(
+            {"error": f"No project manifest found for {project_id!r}."}
+        )
+    return json.dumps(summary, indent=2)
+
+
 @mcp.tool()
 def handoff_pickup(project_id: str = "", workspace_path: str = "") -> str:
     """Return a paste-ready pickup prompt for the current handoff state."""

@@ -142,11 +142,17 @@ Add to `.vscode/mcp.json` (VS Code 1.99+):
     "agent-co-op": {
       "type": "stdio",
       "command": "agent-co-op-mcp",
-      "args": []
+      "args": [],
+      "env": {
+        "AGENT_CO_OP_ROOT": "${workspaceFolder}"
+      }
     }
   }
 }
 ```
+
+Set `AGENT_CO_OP_ROOT` to the workspace root so MCP tools resolve `.agent-co-op/`
+correctly when the server launcher cwd is not the project directory.
 
 ### Available MCP tools
 
@@ -164,6 +170,23 @@ Add to `.vscode/mcp.json` (VS Code 1.99+):
 | `project_validate` | Validate a project manifest and return a JSON report |
 | `project_show` | Show project manifest summary |
 | `routing_show` | Show routing config for a project and phase |
+
+All tools accept an optional `workspace_path` argument; when omitted, `AGENT_CO_OP_ROOT`
+or the process cwd is used.
+
+### MCP read resources
+
+Read-only resources for low-overhead handoff reads (via `AGENT_CO_OP_ROOT` or cwd):
+
+| URI | Content |
+|-----|---------|
+| `handoff://status` | Compact JSON status (phase, objective, staleness, branch warnings, paths) |
+| `handoff://current` | Rendered `CURRENT_HANDOFF.md` |
+| `handoff://state` | Full `handoff-state.json` |
+| `handoff://project/{id}` | Project manifest summary JSON |
+
+See `docs/roadmap.md` for improvement ideas and
+`docs/hooks.md` for SessionStart / resume hint patterns.
 
 ---
 
@@ -303,6 +326,7 @@ examples/
   CURRENT_HANDOFF.example.md
 docs/
   roadmap.md
+  hooks.md
 .cursor/skills/agent-handoff/
   SKILL.md
 .github/skills/agent-handoff/
