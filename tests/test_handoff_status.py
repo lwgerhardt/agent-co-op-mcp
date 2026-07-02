@@ -33,6 +33,23 @@ class TestHandoffStatus:
         assert status["project_id"] == "my-app"
         assert status["paths"]["published_md"].endswith("CURRENT_HANDOFF.md")
 
+    def test_verification_warning(self, tmp_path: Path) -> None:
+        publish("Implement feature", "implement", "my-app", base=tmp_path)
+        status = handoff_status(base=tmp_path)
+        assert status.get("verification_warning")
+        assert "verification queue" in status["verification_warning"]
+
+    def test_no_verification_warning_with_next_steps(self, tmp_path: Path) -> None:
+        publish(
+            "Implement feature",
+            "implement",
+            "my-app",
+            next_steps=["Run tests"],
+            base=tmp_path,
+        )
+        status = handoff_status(base=tmp_path)
+        assert "verification_warning" not in status
+
     def test_stale_warning(self, tmp_path: Path) -> None:
         publish("Old work", "resume", "my-app", base=tmp_path)
         state_path = _handoff_dir(tmp_path) / "handoff-state.json"

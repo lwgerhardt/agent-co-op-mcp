@@ -55,6 +55,11 @@ agent-co-op handoff status [--json]
 agent-co-op handoff history [--json] [--limit N] [--id ENTRY_ID]
 agent-co-op handoff restore --id ENTRY_ID [--json]
 agent-co-op handoff clear
+agent-co-op handoff publish-for-verifier --objective "..." --project <id> [--profile default] [--next-steps STEP ...]
+
+# Run verification queue
+agent-co-op verify run [--json] [--profile ID --project ID] [--continue-on-failure]
+agent-co-op verify report [--json]
 
 # Manage project manifests
 agent-co-op project init <project-id> [--name NAME] [--description TEXT] [--repository URL]
@@ -82,8 +87,10 @@ Each project can have a manifest at `.agent-co-op/<project-id>.json` (or `.agent
 | `roles.<role>.agent` | Override default agent hint |
 | `roles.<role>.model_tier` | Override default model tier |
 | `roles.<role>.work_mode` | Override work mode for that role |
+| `verification.profiles.<id>.commands` | Shell commands for verifier queue |
+| `verification.profiles.<id>.manual_checks` | Human-only verification gates |
 
-See `examples/project.example.json` and `src/agent_co_op/project-manifest.schema.json` for the schema.
+See `examples/project.example.json`, `examples/verification-queue.example.json`, and `src/agent_co_op/project-manifest.schema.json` for schemas.
 
 Validate a manifest before publishing handoffs:
 
@@ -166,6 +173,9 @@ correctly when the server launcher cwd is not the project directory.
 | `handoff_status` | JSON snapshot of current handoff state |
 | `handoff_history` | JSON list of archived handoff states |
 | `handoff_restore` | Restore a prior handoff state from history as the current handoff |
+| `handoff_publish_for_verifier` | Publish implement handoff and write verification queue |
+| `handoff_run_verification` | Run verification queue; return PASS/FAIL JSON |
+| `handoff_verification_report` | Read latest verification report metadata |
 | `project_init` | Create project manifest and optional gitignore entries |
 | `project_validate` | Validate a project manifest and return a JSON report |
 | `project_show` | Show project manifest summary |
@@ -184,6 +194,8 @@ Read-only resources for low-overhead handoff reads (via `AGENT_CO_OP_ROOT` or cw
 | `handoff://current` | Rendered `CURRENT_HANDOFF.md` |
 | `handoff://state` | Full `handoff-state.json` |
 | `handoff://project/{id}` | Project manifest summary JSON |
+| `handoff://queue` | Verification queue JSON |
+| `handoff://report` | Latest verification report JSON |
 
 See `docs/roadmap.md` for improvement ideas and
 `docs/hooks.md` for SessionStart / resume hint patterns.
@@ -334,6 +346,18 @@ docs/
 .claude/skills/agent-handoff/
   SKILL.md
 ```
+
+---
+
+## Exit codes
+
+| Code | Meaning |
+|------|---------|
+| 0 | Success |
+| 1 | Runtime or verification failure |
+| 2 | Invalid input or missing handoff/queue |
+
+`agent-co-op verify run` exits 1 when any automated check fails.
 
 ---
 

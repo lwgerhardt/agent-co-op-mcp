@@ -18,6 +18,9 @@ _GITIGNORE_ENTRIES = (
     f"{_HANDOFF_DIRNAME}/handoff.md",
     f"{_HANDOFF_DIRNAME}/CURRENT_HANDOFF.md",
     f"{_HANDOFF_DIRNAME}/handoff-history/",
+    f"{_HANDOFF_DIRNAME}/verification-queue.json",
+    f"{_HANDOFF_DIRNAME}/verification-report.md",
+    f"{_HANDOFF_DIRNAME}/verification-report.json",
 )
 
 
@@ -289,6 +292,10 @@ def role_prompt(
         handoff_context = state.get("context")
         if isinstance(handoff_context, str) and handoff_context.strip():
             lines += ["", "## Handoff context", handoff_context.strip()]
+        elif isinstance(handoff_context, dict):
+            from .handoff_context import format_context_sections, parse_context
+
+            lines += format_context_sections(parse_context(state))
         git_block = state.get("git")
         if isinstance(git_block, dict):
             from .git_snapshot import format_git_section_lines
