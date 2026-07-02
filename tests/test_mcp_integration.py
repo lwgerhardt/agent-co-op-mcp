@@ -117,3 +117,68 @@ class TestMcpResources:
         monkeypatch.setenv("AGENT_CO_OP_ROOT", str(tmp_path))
         payload = json.loads(resource_handoff_queue())
         assert payload["error"] == "No verification queue found."
+
+    def test_report_resource_missing(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from agent_co_op.mcp_server import resource_handoff_report
+
+        monkeypatch.setenv("AGENT_CO_OP_ROOT", str(tmp_path))
+        payload = json.loads(resource_handoff_report())
+        assert payload["error"] == "No verification report found."
+
+    def test_report_resource_found(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from agent_co_op.mcp_server import resource_handoff_report
+        from agent_co_op.verification import run_verification, write_queue
+
+        monkeypatch.setenv("AGENT_CO_OP_ROOT", str(tmp_path))
+        write_queue(
+            {
+                "version": "1.0",
+                "profile_id": "default",
+                "project_id": "my-app",
+                "commands": [{"id": "ok", "label": "Pass", "command": "true"}],
+            },
+            base=tmp_path,
+        )
+        run_verification(base=tmp_path)
+        payload = json.loads(resource_handoff_report())
+        assert payload["overall"] == "PASS"
+
+    def test_publish_for_verifier_structured_context(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from agent_co_op.handoff import read_state
+        from agent_co_op.mcp_server import handoff_publish_for_verifier
+        from agent_co_op.projects import init_project
+
+        monkeypatch.setenv("AGENT_CO_OP_ROOT", str(tmp_path))
+        init_project("my-app", base=tmp_path)
+        manifest_path = tmp_path / ".agent-co-op" / "my-app.json"
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        manifest["verification"] = {
+            "profiles": {
+                "default": {
+                    "commands": [{"id": "ok", "label": "Pass", "command": "true"}]
+                }
+            }
+        }
+        manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+        context = {
+            "read_map": [{"file": "src/app.py", "lines": "1-10", "why": "entry"}],
+            "blockers": ["Needs review"],
+        }
+        payload = json.loads(
+            handoff_publish_for_verifier(
+                objective="Verify auth",
+                project_id="my-app",
+                context=context,
+            )
+        )
+        assert payload["status"] == "published"
+        state = read_state(base=tmp_path)
+        assert isinstance(state["context"], dict)
+        assert state["context"]["blockers"] == ["Needs review"]

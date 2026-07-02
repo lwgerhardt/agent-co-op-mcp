@@ -5,6 +5,9 @@ from __future__ import annotations
 from pathlib import Path
 
 from agent_co_op.cli import (
+    EXIT_SUCCESS,
+    EXIT_ERROR,
+    EXIT_USAGE,
     build_parser,
     cmd_handoff_history,
     cmd_handoff_restore,
@@ -162,8 +165,8 @@ class TestCliHandlers:
         monkeypatch.chdir(tmp_path)
         parser = build_parser()
         args = parser.parse_args(["project", "init", "my-app"])
-        assert cmd_project_init(args) == 0
-        assert cmd_project_init(args) == 1
+        assert cmd_project_init(args) == EXIT_SUCCESS
+        assert cmd_project_init(args) == EXIT_USAGE
         captured = capsys.readouterr()
         assert "already exists" in captured.err
 
@@ -190,7 +193,7 @@ class TestCliHandlers:
         monkeypatch.chdir(tmp_path)
         parser = build_parser()
         args = parser.parse_args(["project", "validate", "my-app"])
-        assert cmd_project_validate(args) == 1
+        assert cmd_project_validate(args) == EXIT_ERROR
         captured = capsys.readouterr()
         assert "Manifest invalid" in captured.err
 

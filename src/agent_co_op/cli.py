@@ -224,10 +224,10 @@ def cmd_handoff_restore(args: argparse.Namespace) -> int:
         state = handoff.restore(args.id)
     except FileNotFoundError as exc:
         print(f"Error: {exc}", file=sys.stderr)
-        return 1
+        return EXIT_USAGE
     except ValueError as exc:
         print(f"Error: {exc}", file=sys.stderr)
-        return 1
+        return EXIT_ERROR
 
     if args.json:
         print(json.dumps(state, indent=2))
@@ -236,7 +236,7 @@ def cmd_handoff_restore(args: argparse.Namespace) -> int:
             f"Handoff restored from {args.id} "
             f"for {state['project_id']} / {state['phase']}."
         )
-    return 0
+    return EXIT_SUCCESS
 
 
 def cmd_handoff_history(args: argparse.Namespace) -> int:
@@ -245,10 +245,10 @@ def cmd_handoff_history(args: argparse.Namespace) -> int:
         entry = handoff.read_history_entry(args.id)
         if entry is None:
             print(f"No history entry found for {args.id!r}.", file=sys.stderr)
-            return 1
+            return EXIT_USAGE
         if args.json:
             print(json.dumps(entry, indent=2))
-            return 0
+            return EXIT_SUCCESS
         state = entry["state"]
         print(f"ID:        {entry['id']}")
         print(f"Project:   {state.get('project_id', '(unknown)')}")
@@ -261,15 +261,15 @@ def cmd_handoff_history(args: argparse.Namespace) -> int:
             print("Next steps:")
             for step in next_steps:
                 print(f"  - {step}")
-        return 0
+        return EXIT_SUCCESS
 
     history = handoff.handoff_history(limit=limit)
     if args.json:
         print(json.dumps(history, indent=2))
-        return 0
+        return EXIT_SUCCESS
     if history["count"] == 0:
         print("No handoff history found.")
-        return 1
+        return EXIT_USAGE
     for entry in history["entries"]:
         published_at = entry.get("published_at", "(unknown)")
         project_id = entry.get("project_id", "(unknown)")
@@ -278,17 +278,17 @@ def cmd_handoff_history(args: argparse.Namespace) -> int:
         print(
             f"{entry['id']}\t{published_at}\t{project_id}\t{phase}\t{objective}"
         )
-    return 0
+    return EXIT_SUCCESS
 
 
 def cmd_project_show(args: argparse.Namespace) -> int:
     try:
         summary = projects.project_summary(args.project_id)
         print(json.dumps(summary, indent=2))
-        return 0
+        return EXIT_SUCCESS
     except FileNotFoundError as exc:
         print(f"Error: {exc}", file=sys.stderr)
-        return 1
+        return EXIT_USAGE
 
 
 def cmd_project_init(args: argparse.Namespace) -> int:
@@ -300,13 +300,13 @@ def cmd_project_init(args: argparse.Namespace) -> int:
             repository=args.repository or "",
         )
         print(f"Project manifest created at {path}")
-        return 0
+        return EXIT_SUCCESS
     except FileExistsError as exc:
         print(f"Error: {exc}", file=sys.stderr)
-        return 1
+        return EXIT_USAGE
     except OSError as exc:
         print(f"Error: {exc}", file=sys.stderr)
-        return 1
+        return EXIT_ERROR
 
 
 def cmd_project_validate(args: argparse.Namespace) -> int:
@@ -314,10 +314,10 @@ def cmd_project_validate(args: argparse.Namespace) -> int:
 
     if args.file and args.project_id:
         print("Error: specify either project_id or --file, not both.", file=sys.stderr)
-        return 2
+        return EXIT_USAGE
     if not args.file and not args.project_id:
         print("Error: project_id or --file is required.", file=sys.stderr)
-        return 2
+        return EXIT_USAGE
 
     try:
         if args.file:
@@ -330,10 +330,10 @@ def cmd_project_validate(args: argparse.Namespace) -> int:
             report["project_id"] = args.project_id
     except FileNotFoundError as exc:
         print(f"Error: {exc}", file=sys.stderr)
-        return 1
+        return EXIT_USAGE
     except ValueError as exc:
         print(f"Error: {exc}", file=sys.stderr)
-        return 1
+        return EXIT_ERROR
 
     if args.file:
         report.setdefault("project_id", report.get("id"))
@@ -348,7 +348,7 @@ def cmd_project_validate(args: argparse.Namespace) -> int:
         print(f"Manifest invalid: {report['manifest_path']}", file=sys.stderr)
         for error in report["errors"]:
             print(f"  - {error}", file=sys.stderr)
-    return 0 if report["valid"] else 1
+    return EXIT_SUCCESS if report["valid"] else EXIT_ERROR
 
 
 def cmd_init(args: argparse.Namespace) -> int:
@@ -367,13 +367,13 @@ def cmd_init(args: argparse.Namespace) -> int:
         print("\nNext steps:")
         for command in result["next_commands"]:
             print(f"  {command}")
-        return 0
+        return EXIT_SUCCESS
     except FileExistsError as exc:
         print(f"Error: {exc}", file=sys.stderr)
-        return 1
+        return EXIT_USAGE
     except OSError as exc:
         print(f"Error: {exc}", file=sys.stderr)
-        return 1
+        return EXIT_ERROR
 
 
 def build_parser() -> argparse.ArgumentParser:
