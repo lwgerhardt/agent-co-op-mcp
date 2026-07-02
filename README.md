@@ -56,6 +56,8 @@ agent-co-op handoff clear
 # Manage project manifests
 agent-co-op project init <project-id> [--name NAME] [--description TEXT] [--repository URL]
 agent-co-op project show <project-id>
+agent-co-op project validate <project-id> [--json]
+agent-co-op project validate --file PATH [--expected-id ID] [--json]
 ```
 
 **Roles:** `scaffold`, `planner`, `verifier`, `efficiency`, `resume`
@@ -78,7 +80,14 @@ Each project can have a manifest at `.agent-co-op/<project-id>.json` (or `.agent
 | `roles.<role>.model_tier` | Override default model tier |
 | `roles.<role>.work_mode` | Override work mode for that role |
 
-See `examples/project.example.json` for a full example.
+See `examples/project.example.json` and `src/agent_co_op/project-manifest.schema.json` for the schema.
+
+Validate a manifest before publishing handoffs:
+
+```bash
+agent-co-op project validate my-saas
+agent-co-op project validate --file examples/project.example.json --expected-id my-saas
+```
 
 ---
 
@@ -146,6 +155,7 @@ Add to `.vscode/mcp.json` (VS Code 1.99+):
 | `handoff_clear` | Delete all handoff files |
 | `handoff_status` | JSON snapshot of current handoff state |
 | `project_init` | Create project manifest and optional gitignore entries |
+| `project_validate` | Validate a project manifest and return a JSON report |
 | `project_show` | Show project manifest summary |
 | `routing_show` | Show routing config for a project and phase |
 
@@ -237,6 +247,8 @@ src/agent_co_op/
   routing.py          # roles, work modes, phase→role, resolve routing
   handoff.py          # capture/publish/clear handoff markdown + JSON
   projects.py         # manifests, init workspace, role-prompt, pickup
+  manifest.py         # JSON Schema validation for project manifests
+  project-manifest.schema.json
   defaults.json       # routing + work_modes config
   cli.py              # CLI entry point (agent-co-op)
   mcp_server.py       # stdio MCP server (agent-co-op-mcp)
@@ -246,6 +258,7 @@ tests/
   test_handoff_status.py
   test_pickup.py
   test_projects.py
+  test_manifest.py
   test_cli.py
 examples/
   project.example.json

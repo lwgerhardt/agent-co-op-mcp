@@ -80,6 +80,12 @@ def project_init(
 
 
 @mcp.tool()
+def project_validate(project_id: str) -> str:
+    """Validate a project manifest and return a JSON report."""
+    return json.dumps(_projects.validate_project(project_id), indent=2)
+
+
+@mcp.tool()
 def routing_show(project_id: str, phase: str = "") -> str:
     """Show routing info for a project and optional phase."""
     p: str | None = phase or None
