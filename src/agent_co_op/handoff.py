@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 import json
+import os
 import re
+import sys
+import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -32,12 +35,56 @@ def _write_handoff_files(state: dict[str, Any], base: Path | None = None) -> Non
     )
     d = _handoff_dir(base)
     d.mkdir(parents=True, exist_ok=True)
-    (d / "handoff-state.json").write_text(
-        json.dumps(state, indent=2), encoding="utf-8"
-    )
     summary_md = _render_handoff_md(state, routing)
-    (d / "handoff.md").write_text(summary_md, encoding="utf-8")
-    (d / "CURRENT_HANDOFF.md").write_text(summary_md, encoding="utf-8")
+
+    tmp_state = ""
+    tmp_handoff_md = ""
+    tmp_current_md = ""
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="w",
+            dir=d,
+            prefix=".tmp-",
+            suffix=".json",
+            delete=False,
+            encoding="utf-8",
+        ) as tmp:
+            json.dump(state, tmp, indent=2)
+            tmp_state = tmp.name
+
+        with tempfile.NamedTemporaryFile(
+            mode="w",
+            dir=d,
+            prefix=".tmp-",
+            suffix=".md",
+            delete=False,
+            encoding="utf-8",
+        ) as tmp:
+            tmp.write(summary_md)
+            tmp_handoff_md = tmp.name
+
+        with tempfile.NamedTemporaryFile(
+            mode="w",
+            dir=d,
+            prefix=".tmp-",
+            suffix=".md",
+            delete=False,
+            encoding="utf-8",
+        ) as tmp:
+            tmp.write(summary_md)
+            tmp_current_md = tmp.name
+
+        os.replace(tmp_state, d / "handoff-state.json")
+        os.replace(tmp_handoff_md, d / "handoff.md")
+        os.replace(tmp_current_md, d / "CURRENT_HANDOFF.md")
+    except Exception:
+        for tmp_path in (tmp_state, tmp_handoff_md, tmp_current_md):
+            if tmp_path:
+                try:
+                    Path(tmp_path).unlink()
+                except OSError:
+                    pass
+        raise
 
 
 def _history_dir(base: Path | None = None) -> Path:
@@ -108,7 +155,14 @@ def list_history(
 
     items: list[tuple[str, dict[str, Any]]] = []
     for json_path in history.glob("*.json"):
-        state = json.loads(json_path.read_text(encoding="utf-8"))
+        try:
+            state = json.loads(json_path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError as exc:
+            print(
+                f"Warning: skipping corrupt history entry {json_path.stem}: {exc}",
+                file=sys.stderr,
+            )
+            continue
         items.append((json_path.stem, state))
     items.sort(
         key=lambda item: item[1].get("archived_at", item[1].get("published_at", "")),
@@ -148,7 +202,12 @@ def read_history_entry(
     if not json_path.exists():
         return None
 
-    state = json.loads(json_path.read_text(encoding="utf-8"))
+    try:
+        state = json.loads(json_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise ValueError(
+            f"Corrupted history entry at {json_path}: {exc}."
+        ) from exc
     md_path = history / f"{entry_id}.md"
     markdown = md_path.read_text(encoding="utf-8") if md_path.exists() else None
     return {"id": entry_id, "state": state, "markdown": markdown}
@@ -416,7 +475,13 @@ def read_state(base: Path | None = None) -> dict[str, Any] | None:
     p = _handoff_dir(base) / "handoff-state.json"
     if not p.exists():
         return None
-    return json.loads(p.read_text(encoding="utf-8"))
+    try:
+        return json.loads(p.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise ValueError(
+            f"Corrupted handoff state at {p}: {exc}. "
+            "Run 'agent-co-op handoff clear' to reset."
+        ) from exc
 
 
 def read_current_handoff(base: Path | None = None) -> str | None:

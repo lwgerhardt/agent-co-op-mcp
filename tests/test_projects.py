@@ -65,6 +65,13 @@ class TestInitProject:
         with pytest.raises(FileExistsError):
             init_project("my-app", base=tmp_path)
 
+    def test_rejects_unsafe_project_id(self, tmp_path: Path) -> None:
+        with pytest.raises(ValueError, match="Invalid project id"):
+            init_project("../escaped", base=tmp_path)
+        assert not (tmp_path / ".agent-co-op").exists() or not any(
+            (tmp_path / ".agent-co-op").glob("*.json")
+        )
+
 
 class TestInitWorkspace:
     def test_creates_manifest(self, tmp_path: Path) -> None:
@@ -193,3 +200,13 @@ class TestProjectRolePrompt:
         result = pickup(base=tmp_path)
         assert "My SaaS App" in result
         assert "Run unit tests before marking done" in result
+
+    def test_role_prompt_ignores_other_project_state(self, tmp_path: Path) -> None:
+        init_project("proj-a", base=tmp_path)
+        init_project("proj-b", base=tmp_path)
+        publish("Work on A", "plan", "proj-a", base=tmp_path)
+
+        result = role_prompt("proj-b", "planner", phase="plan", base=tmp_path)
+        assert "Work on A" not in result
+        assert "different project" in result
+        assert "proj-a" in result

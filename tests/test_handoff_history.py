@@ -97,3 +97,16 @@ class TestHandoffHistoryArchive:
 
         entry_ids = [entry["id"] for entry in list_history(base=tmp_path)]
         assert f"{stem}-1" in entry_ids
+
+    def test_skips_corrupt_history_entries(self, tmp_path: Path, capsys) -> None:
+        publish("Good entry", "plan", "my-app", base=tmp_path)
+        publish("Next entry", "implement", "my-app", base=tmp_path)
+
+        history = tmp_path / ".agent-co-op" / "handoff-history"
+        (history / "corrupt-entry.json").write_text("{bad json", encoding="utf-8")
+
+        entries = list_history(base=tmp_path)
+        assert len(entries) == 1
+        assert entries[0]["objective"] == "Good entry"
+        captured = capsys.readouterr()
+        assert "Warning: skipping corrupt history entry corrupt-entry" in captured.err
