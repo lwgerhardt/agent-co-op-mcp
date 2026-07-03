@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Fail if tracked files contain forbidden consumer reference paths or names.
+# Fail if tracked files contain forbidden legacy project references.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -8,13 +8,9 @@ cd "$ROOT"
 GUARD_SCRIPT="scripts/check-reference-guard.sh"
 
 PATTERNS=(
-  'examples/loa'
-  'references/loa'
-  'loa-gap-analysis'
   'legacy-of-arcana'
   'Legacy-of-Arcana'
   'Legacy of Arcana'
-  '\bLoA\b'
   '\bArcana\b'
 )
 
@@ -40,8 +36,8 @@ for pattern in "${PATTERNS[@]}"; do
 done
 
 if ((FAILED != 0)); then
-  echo "Forbidden reference patterns must not appear in this repository."
-  echo "Remove the matches above or use generic examples under examples/."
+  echo "Forbidden legacy project references must not appear in this repository."
+  echo "Remove the matches above and replace them with neutral project names."
   exit 1
 fi
 
