@@ -5,6 +5,9 @@
   "type": "object",
   "required": ["id"],
   "additionalProperties": false,
+  "patternProperties": {
+    "^x-": {}
+  },
   "properties": {
     "id": {
       "type": "string",
@@ -13,10 +16,73 @@
     "name": {
       "type": "string"
     },
+    "title": {
+      "type": "string",
+      "description": "Optional display title (alias for name in consumer repos)"
+    },
     "description": {
       "type": "string"
     },
     "repository": {
+      "type": "string"
+    },
+    "status": {
+      "type": "string",
+      "enum": ["planned", "active", "paused", "archived"]
+    },
+    "branch": {
+      "type": "string",
+      "minLength": 1
+    },
+    "handoff_doc": {
+      "type": "string",
+      "minLength": 1
+    },
+    "plan_doc": {
+      "type": "string"
+    },
+    "verification_profile": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Profile id referencing a consumer-repo verification profile JSON file"
+    },
+    "domains": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "uniqueItems": true
+    },
+    "bootstrap": {
+      "$ref": "#/$defs/bootstrapCommands"
+    },
+    "status_cmd": {
+      "type": "string",
+      "minLength": 1
+    },
+    "paths_index": {
+      "type": "string",
+      "minLength": 1
+    },
+    "read_map": {
+      "type": "array",
+      "items": {
+        "oneOf": [
+          {
+            "type": "string",
+            "minLength": 1
+          },
+          {
+            "$ref": "#/$defs/readMapEntry"
+          }
+        ]
+      }
+    },
+    "planner_notes": {
+      "type": "string"
+    },
+    "verifier_notes": {
       "type": "string"
     },
     "roles": {
@@ -39,6 +105,39 @@
     }
   },
   "$defs": {
+    "bootstrapCommands": {
+      "oneOf": [
+        {
+          "type": "string",
+          "minLength": 1
+        },
+        {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "minItems": 1
+        }
+      ]
+    },
+    "readMapEntry": {
+      "type": "object",
+      "required": ["file"],
+      "additionalProperties": false,
+      "properties": {
+        "file": {
+          "type": "string",
+          "minLength": 1
+        },
+        "lines": {
+          "type": "string"
+        },
+        "why": {
+          "type": "string"
+        }
+      }
+    },
     "roleConfig": {
       "type": "object",
       "additionalProperties": false,
@@ -52,7 +151,7 @@
         },
         "model_tier": {
           "type": "string",
-          "enum": ["low", "medium", "high"]
+          "enum": ["low", "medium", "high", "fast", "capable"]
         },
         "work_mode": {
           "type": "string",

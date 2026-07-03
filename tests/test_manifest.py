@@ -41,7 +41,21 @@ class TestValidateManifestData:
 
     def test_unknown_top_level_field(self) -> None:
         report = validate_manifest_data({"id": "x", "extra": True})
-        assert report["valid"] is False
+        assert report["valid"] is True
+        assert any("extra" in warning for warning in report["warnings"])
+
+    def test_extension_key_allowed(self) -> None:
+        report = validate_manifest_data({"id": "x", "x-custom": {"note": "ok"}})
+        assert report["valid"] is True
+        assert report["warnings"] == []
+
+    def test_valid_v2_manifest_example(self) -> None:
+        example = json.loads(
+            Path("examples/project.example.json").read_text(encoding="utf-8")
+        )
+        report = validate_manifest_data(example, expected_id="my-saas")
+        assert report["valid"] is True
+        assert "verifier" in report["roles"]
 
     def test_unknown_role_key(self) -> None:
         report = validate_manifest_data(

@@ -219,6 +219,32 @@ def _role_notes(project: dict[str, Any] | None, role: str) -> str | None:
     return notes if isinstance(notes, str) and notes.strip() else None
 
 
+def _normalize_bootstrap_commands(value: Any) -> list[str]:
+    if isinstance(value, str) and value.strip():
+        return [value.strip()]
+    if isinstance(value, list):
+        return [item.strip() for item in value if isinstance(item, str) and item.strip()]
+    return []
+
+
+def _format_read_map_entry(entry: Any) -> str | None:
+    if isinstance(entry, str) and entry.strip():
+        return entry.strip()
+    if isinstance(entry, dict):
+        file_path = entry.get("file")
+        if not isinstance(file_path, str) or not file_path.strip():
+            return None
+        parts = [file_path.strip()]
+        lines = entry.get("lines")
+        if isinstance(lines, str) and lines.strip():
+            parts.append(lines.strip())
+        why = entry.get("why")
+        if isinstance(why, str) and why.strip():
+            parts.append(f"— {why.strip()}")
+        return " ".join(parts)
+    return None
+
+
 def _append_project_context(
     lines: list[str],
     project: dict[str, Any] | None,
@@ -227,7 +253,7 @@ def _append_project_context(
     if project is None:
         return
     section: list[str] = []
-    name = project.get("name")
+    name = project.get("name") or project.get("title")
     if isinstance(name, str) and name.strip():
         section.append(f"**Name:** {name}")
     description = project.get("description")
@@ -236,9 +262,55 @@ def _append_project_context(
     repository = project.get("repository")
     if isinstance(repository, str) and repository.strip():
         section.append(f"**Repository:** {repository}")
+    status = project.get("status")
+    if isinstance(status, str) and status.strip():
+        section.append(f"**Status:** {status}")
+    branch = project.get("branch")
+    if isinstance(branch, str) and branch.strip():
+        section.append(f"**Branch:** {branch}")
+    verification_profile = project.get("verification_profile")
+    if isinstance(verification_profile, str) and verification_profile.strip():
+        section.append(f"**Verification profile:** {verification_profile}")
     if not section:
         section.append(f"**ID:** {project_id}")
     lines += ["", "## Project", *section]
+
+
+def _append_workflow_context(
+    lines: list[str],
+    project: dict[str, Any] | None,
+    role: str,
+) -> None:
+    if project is None:
+        return
+
+    bootstrap = _normalize_bootstrap_commands(project.get("bootstrap"))
+    if bootstrap:
+        lines += ["", "## Bootstrap"]
+        for command in bootstrap:
+            lines.append(f"- `{command}`")
+
+    read_map = project.get("read_map")
+    if isinstance(read_map, list):
+        entries = [
+            formatted
+            for item in read_map
+            if (formatted := _format_read_map_entry(item)) is not None
+        ]
+        if entries:
+            lines += ["", "## Files to read"]
+            for entry in entries:
+                lines.append(f"- {entry}")
+
+    if role == "planner":
+        planner_notes = project.get("planner_notes")
+        if isinstance(planner_notes, str) and planner_notes.strip():
+            lines += ["", "## Planner notes", planner_notes.strip()]
+
+    if role == "verifier":
+        verifier_notes = project.get("verifier_notes")
+        if isinstance(verifier_notes, str) and verifier_notes.strip():
+            lines += ["", "## Verifier notes", verifier_notes.strip()]
 
 
 def role_prompt(
@@ -273,6 +345,7 @@ def role_prompt(
     if phase:
         lines.append(f"**Phase:** {phase}")
     _append_project_context(lines, project, project_id)
+    _append_workflow_context(lines, project, role)
     role_notes = _role_notes(project, role)
     if role_notes:
         lines += ["", "## Role notes", role_notes]

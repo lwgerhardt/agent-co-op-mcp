@@ -88,6 +88,13 @@ class TestInitWorkspace:
         assert ".agent-co-op/handoff-history/" in gitignore
         assert "# agent-co-op handoff state" in gitignore
 
+    def test_gitignore_includes_verification_artifacts(self, tmp_path: Path) -> None:
+        init_workspace("my-app", base=tmp_path)
+        gitignore = (tmp_path / ".gitignore").read_text(encoding="utf-8")
+        assert ".agent-co-op/verification-queue.json" in gitignore
+        assert ".agent-co-op/verification-report.json" in gitignore
+        assert ".agent-co-op/verification-report.md" in gitignore
+
     def test_skips_gitignore_when_disabled(self, tmp_path: Path) -> None:
         result = init_workspace("my-app", update_gitignore=False, base=tmp_path)
         assert result["gitignore_updated"] is False
@@ -210,3 +217,33 @@ class TestProjectRolePrompt:
         assert "Work on A" not in result
         assert "different project" in result
         assert "proj-a" in result
+
+    def test_role_prompt_includes_workflow_fields(self, tmp_path: Path) -> None:
+        _write_manifest(
+            tmp_path,
+            "my-saas",
+            {
+                "id": "my-saas",
+                "bootstrap": ["./scripts/status.sh", "./scripts/paths.sh"],
+                "read_map": [
+                    "src/main.py 1-40",
+                    {"file": "README.md", "lines": "1-20", "why": "setup"},
+                ],
+                "planner_notes": "Check API contract first",
+                "verifier_notes": "Run smoke test in browser",
+                "roles": {},
+            },
+        )
+        planner = role_prompt("my-saas", "planner", base=tmp_path)
+        assert "## Bootstrap" in planner
+        assert "./scripts/status.sh" in planner
+        assert "## Files to read" in planner
+        assert "README.md" in planner
+        assert "## Planner notes" in planner
+        assert "API contract" in planner
+        assert "## Verifier notes" not in planner
+
+        verifier = role_prompt("my-saas", "verifier", base=tmp_path)
+        assert "## Verifier notes" in verifier
+        assert "smoke test" in verifier
+        assert "## Planner notes" not in verifier
