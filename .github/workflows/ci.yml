@@ -7,6 +7,15 @@ on:
     branches: [main]
 
 jobs:
+  reference-guard:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Run reference guard
+        run: bash scripts/check-reference-guard.sh
+
   lint-and-test:
     runs-on: ubuntu-latest
     strategy:
