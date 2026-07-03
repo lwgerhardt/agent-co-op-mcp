@@ -83,14 +83,22 @@ Each project can have a manifest at `.agent-co-op/<project-id>.json` (or `.agent
 | Field | Purpose |
 |-------|---------|
 | `id`, `name`, `description`, `repository` | Shown in pickup/role prompts |
+| `status`, `branch` | Project lifecycle and git branch hints |
+| `handoff_doc`, `plan_doc` | Consumer-repo doc paths (reference only) |
+| `verification_profile` | Id referencing a consumer verification profile JSON file |
+| `domains`, `bootstrap`, `status_cmd`, `paths_index` | Workflow orientation metadata |
+| `read_map` | Files/lines to read (strings or `{file, lines?, why?}` objects) |
+| `planner_notes`, `verifier_notes` | Role-specific notes injected into prompts |
 | `roles.<role>.notes` | Role-specific guidance in prompts |
 | `roles.<role>.agent` | Override default agent hint |
-| `roles.<role>.model_tier` | Override default model tier |
+| `roles.<role>.model_tier` | Override default model tier (`low`/`medium`/`high` or consumer `fast`/`capable`) |
 | `roles.<role>.work_mode` | Override work mode for that role |
 | `verification.profiles.<id>.commands` | Shell commands for verifier queue |
 | `verification.profiles.<id>.manual_checks` | Human-only verification gates |
 
 See `examples/project.example.json`, `examples/verification-queue.example.json`, and `src/agent_co_op/project-manifest.schema.json` for schemas.
+
+`agent-co-op init` gitignores live queue and report paths under `.agent-co-op/`.
 
 Validate a manifest before publishing handoffs:
 

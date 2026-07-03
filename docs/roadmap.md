@@ -44,6 +44,9 @@ transcripts in the repo.
 | File | Purpose | Git |
 |------|---------|-----|
 | `.agent-co-op/<project-id>.json` | Project manifest | Commit |
+| `.agent-co-op/verification-queue.json` | Verification command queue (from profile) | Ignore |
+| `.agent-co-op/verification-report.json` | Machine-readable verify results | Ignore |
+| `.agent-co-op/verification-report.md` | Human-readable verify results | Ignore |
 | `.agent-co-op/handoff-state.json` | Machine-readable state | Ignore (via `init`) |
 | `.agent-co-op/handoff.md` | Human summary | Ignore |
 | `.agent-co-op/CURRENT_HANDOFF.md` | Published pickup file | Ignore |
@@ -208,8 +211,11 @@ v1 fields remain valid; nested blocks are optional.
 
 ## Suggested implementation order
 
-1. MCP read resources + enriched status
-2. Git snapshot + branch mismatch warnings
-3. Verification queue design → CLI runner → MCP tools
-4. Transcript-assisted capture
-5. v2 schema fields + read_map in published markdown
+1. ~~MCP read resources + enriched status~~ (shipped)
+2. ~~Git snapshot + branch mismatch warnings~~ (shipped)
+3. ~~Project manifest v2 schema + verification queue~~ (shipped — #31, #16, #43)
+4. ~~Structured handoff markdown sections~~ (shipped — #21, #43)
+5. ~~Verification CLI runner → publish-for-verifier → MCP tools~~ (shipped — #18, #20, #43)
+6. Transcript-assisted capture (#24)
+7. Multi-project registry + bootstrap CLI (#44, #45)
+8. v2 manifest workflow fields in role prompts (read_map, bootstrap, role notes)
