@@ -11,9 +11,9 @@ from typing import Any
 import jsonschema
 from jsonschema.exceptions import ValidationError
 
-from .projects import load_project
+from .project_store import load_project
+from .workspace_paths import handoff_dir
 
-_HANDOFF_DIRNAME = ".agent-co-op"
 QUEUE_FILENAME = "verification-queue.json"
 REPORT_MD_FILENAME = "verification-report.md"
 REPORT_JSON_FILENAME = "verification-report.json"
@@ -22,10 +22,6 @@ SCHEMA_PATH = Path(__file__).parent / "verification-queue.schema.json"
 
 class VerificationError(ValueError):
     """Raised when verification input or execution fails."""
-
-
-def _handoff_dir(base: Path | None = None) -> Path:
-    return (base or Path.cwd()) / _HANDOFF_DIRNAME
 
 
 def _load_schema() -> dict[str, Any]:
@@ -52,15 +48,15 @@ def validate_queue_data(queue: Any) -> dict[str, Any]:
 
 
 def queue_path(base: Path | None = None) -> Path:
-    return _handoff_dir(base) / QUEUE_FILENAME
+    return handoff_dir(base) / QUEUE_FILENAME
 
 
 def report_md_path(base: Path | None = None) -> Path:
-    return _handoff_dir(base) / REPORT_MD_FILENAME
+    return handoff_dir(base) / REPORT_MD_FILENAME
 
 
 def report_json_path(base: Path | None = None) -> Path:
-    return _handoff_dir(base) / REPORT_JSON_FILENAME
+    return handoff_dir(base) / REPORT_JSON_FILENAME
 
 
 def load_queue(base: Path | None = None) -> dict[str, Any] | None:
@@ -82,8 +78,8 @@ def write_queue(queue: dict[str, Any], base: Path | None = None) -> Path:
         raise VerificationError(
             "Invalid verification queue: " + "; ".join(report["errors"])
         )
-    d = _handoff_dir(base)
-    d.mkdir(parents=True, exist_ok=True)
+    root = handoff_dir(base)
+    root.mkdir(parents=True, exist_ok=True)
     path = queue_path(base)
     path.write_text(json.dumps(queue, indent=2) + "\n", encoding="utf-8")
     return path
@@ -350,8 +346,8 @@ def run_verification(
 
 
 def _write_reports(summary: dict[str, Any], base: Path | None = None) -> None:
-    d = _handoff_dir(base)
-    d.mkdir(parents=True, exist_ok=True)
+    root = handoff_dir(base)
+    root.mkdir(parents=True, exist_ok=True)
 
     lines = [
         "# Verification report",

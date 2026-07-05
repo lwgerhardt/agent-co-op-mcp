@@ -3,60 +3,25 @@
 from __future__ import annotations
 
 import json
-import re
 import subprocess
 from pathlib import Path
 from typing import Any
 
-from .routing import resolve_routing, phase_to_role
+from .project_store import find_manifest_path, load_project, validate_project_id
+from .prompt_builder import build_role_prompt
+from .routing import phase_to_role, resolve_routing
+from .workspace_paths import HANDOFF_DIRNAME, handoff_dir
 
-_HANDOFF_DIRNAME = ".agent-co-op"
-_SAFE_PROJECT_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
 _GITIGNORE_MARKER = "# agent-co-op handoff state"
 _GITIGNORE_ENTRIES = (
-    f"{_HANDOFF_DIRNAME}/handoff-state.json",
-    f"{_HANDOFF_DIRNAME}/handoff.md",
-    f"{_HANDOFF_DIRNAME}/CURRENT_HANDOFF.md",
-    f"{_HANDOFF_DIRNAME}/handoff-history/",
-    f"{_HANDOFF_DIRNAME}/verification-queue.json",
-    f"{_HANDOFF_DIRNAME}/verification-report.md",
-    f"{_HANDOFF_DIRNAME}/verification-report.json",
+    f"{HANDOFF_DIRNAME}/handoff-state.json",
+    f"{HANDOFF_DIRNAME}/handoff.md",
+    f"{HANDOFF_DIRNAME}/CURRENT_HANDOFF.md",
+    f"{HANDOFF_DIRNAME}/handoff-history/",
+    f"{HANDOFF_DIRNAME}/verification-queue.json",
+    f"{HANDOFF_DIRNAME}/verification-report.md",
+    f"{HANDOFF_DIRNAME}/verification-report.json",
 )
-
-
-def _handoff_dir(base: Path | None = None) -> Path:
-    return (base or Path.cwd()) / _HANDOFF_DIRNAME
-
-
-def _validate_project_id(project_id: str) -> None:
-    if not _SAFE_PROJECT_ID.fullmatch(project_id):
-        raise ValueError(
-            f"Invalid project id {project_id!r}. "
-            "Use letters, numbers, dots, underscores, or hyphens; "
-            "must start with a letter or number."
-        )
-
-
-def load_project(project_id: str, base: Path | None = None) -> dict[str, Any] | None:
-    """Load a project manifest from .agent-co-op/.
-
-    Looks for <project_id>.json then project.json under <base>/.agent-co-op/.
-    Returns None if no manifest is found.
-    """
-    path = find_manifest_path(project_id, base=base)
-    if path is None:
-        return None
-    return json.loads(path.read_text(encoding="utf-8"))
-
-
-def find_manifest_path(project_id: str, base: Path | None = None) -> Path | None:
-    """Return the manifest path for a project id, or None if missing."""
-    _validate_project_id(project_id)
-    d = _handoff_dir(base)
-    for candidate in (d / f"{project_id}.json", d / "project.json"):
-        if candidate.exists():
-            return candidate
-    return None
 
 
 def validate_project(project_id: str, base: Path | None = None) -> dict[str, Any]:
@@ -83,10 +48,10 @@ def init_project(
     base: Path | None = None,
 ) -> Path:
     """Create a starter project manifest under .agent-co-op/<project_id>.json."""
-    _validate_project_id(project_id)
-    d = _handoff_dir(base)
-    d.mkdir(parents=True, exist_ok=True)
-    manifest_path = d / f"{project_id}.json"
+    validate_project_id(project_id)
+    root = handoff_dir(base)
+    root.mkdir(parents=True, exist_ok=True)
+    manifest_path = root / f"{project_id}.json"
     if manifest_path.exists():
         raise FileExistsError(f"Project manifest already exists: {manifest_path}")
 
@@ -157,11 +122,7 @@ def init_workspace(
     update_gitignore: bool = True,
     base: Path | None = None,
 ) -> dict[str, Any]:
-    """Bootstrap agent-co-op in a target workspace.
-
-    Creates the project manifest and optionally appends handoff-state entries
-    to .gitignore. Returns paths and suggested next commands.
-    """
+    """Bootstrap agent-co-op in a target workspace."""
     root = base or Path.cwd()
     repo = repository if repository is not None else _detect_git_repository(root)
     manifest_path = init_project(
@@ -202,165 +163,8 @@ def project_summary(project_id: str, base: Path | None = None) -> dict[str, Any]
         "description": project.get("description", ""),
         "repository": project.get("repository", ""),
         "roles": sorted(roles.keys()) if isinstance(roles, dict) else [],
-        "manifest_path": str(_handoff_dir(base) / f"{project_id}.json"),
+        "manifest_path": str(handoff_dir(base) / f"{project_id}.json"),
     }
-
-
-def _role_notes(project: dict[str, Any] | None, role: str) -> str | None:
-    if project is None:
-        return None
-    roles = project.get("roles", {})
-    if not isinstance(roles, dict):
-        return None
-    role_config = roles.get(role, {})
-    if not isinstance(role_config, dict):
-        return None
-    notes = role_config.get("notes")
-    return notes if isinstance(notes, str) and notes.strip() else None
-
-
-def _normalize_bootstrap_commands(value: Any) -> list[str]:
-    if isinstance(value, str) and value.strip():
-        return [value.strip()]
-    if isinstance(value, list):
-        return [item.strip() for item in value if isinstance(item, str) and item.strip()]
-    return []
-
-
-def _format_read_map_entry(entry: Any) -> str | None:
-    if isinstance(entry, str) and entry.strip():
-        return entry.strip()
-    if isinstance(entry, dict):
-        file_path = entry.get("file")
-        if not isinstance(file_path, str) or not file_path.strip():
-            return None
-        parts = [file_path.strip()]
-        lines = entry.get("lines")
-        if isinstance(lines, str) and lines.strip():
-            parts.append(lines.strip())
-        why = entry.get("why")
-        if isinstance(why, str) and why.strip():
-            parts.append(f"— {why.strip()}")
-        return " ".join(parts)
-    return None
-
-
-def _nonempty_str(value: Any) -> str | None:
-    if isinstance(value, str) and value.strip():
-        return value.strip()
-    return None
-
-
-def _append_bullet_section(lines: list[str], title: str, items: list[str]) -> None:
-    if not items:
-        return
-    lines += ["", f"## {title}"]
-    lines.extend(f"- {item}" for item in items)
-
-
-def _append_labeled_section(
-    lines: list[str],
-    title: str,
-    fields: list[tuple[str, str | None]],
-) -> None:
-    section = [
-        f"**{label}:** {value}" for label, value in fields if value is not None
-    ]
-    if not section:
-        return
-    lines += ["", f"## {title}", *section]
-
-
-def _append_project_context(
-    lines: list[str],
-    project: dict[str, Any] | None,
-    project_id: str,
-) -> None:
-    if project is None:
-        return
-    fields = [
-        ("Name", _nonempty_str(project.get("name")) or _nonempty_str(project.get("title"))),
-        ("Description", _nonempty_str(project.get("description"))),
-        ("Repository", _nonempty_str(project.get("repository"))),
-        ("Status", _nonempty_str(project.get("status"))),
-        ("Branch", _nonempty_str(project.get("branch"))),
-        ("Verification profile", _nonempty_str(project.get("verification_profile"))),
-    ]
-    if not any(value for _, value in fields):
-        fields = [("ID", project_id)]
-    _append_labeled_section(lines, "Project", fields)
-
-
-def _append_workflow_context(
-    lines: list[str],
-    project: dict[str, Any] | None,
-    role: str,
-) -> None:
-    if project is None:
-        return
-
-    bootstrap = _normalize_bootstrap_commands(project.get("bootstrap"))
-    if bootstrap:
-        _append_bullet_section(lines, "Bootstrap", [f"`{command}`" for command in bootstrap])
-
-    read_map = project.get("read_map")
-    if isinstance(read_map, list):
-        entries = [
-            formatted
-            for item in read_map
-            if (formatted := _format_read_map_entry(item)) is not None
-        ]
-        _append_bullet_section(lines, "Files to read", entries)
-
-    role_notes = {
-        "planner": _nonempty_str(project.get("planner_notes")),
-        "verifier": _nonempty_str(project.get("verifier_notes")),
-    }
-    notes = role_notes.get(role)
-    if notes:
-        lines += ["", f"## {role.title()} notes", notes]
-
-
-def _append_handoff_state_context(
-    lines: list[str],
-    state: dict[str, Any],
-    project_id: str,
-) -> None:
-    if state.get("project_id") != project_id:
-        active_project = state.get("project_id", "unknown")
-        lines += [
-            "",
-            "## Note",
-            (
-                f"Handoff state exists for a different project ({active_project!r}). "
-                "Run 'agent-co-op handoff clear' to reset, or "
-                "'agent-co-op handoff history' to inspect."
-            ),
-        ]
-        return
-
-    lines += [
-        "",
-        "## Current objective",
-        state.get("objective", "(none)"),
-    ]
-    handoff_context = state.get("context")
-    if isinstance(handoff_context, str) and handoff_context.strip():
-        lines += ["", "## Handoff context", handoff_context.strip()]
-    elif isinstance(handoff_context, dict):
-        from .handoff_context import format_context_sections, parse_context
-
-        lines += format_context_sections(parse_context(state))
-    git_block = state.get("git")
-    if isinstance(git_block, dict):
-        from .git_snapshot import format_git_section_lines
-
-        lines += format_git_section_lines(git_block)
-    next_steps: list[str] = state.get("next_steps", [])
-    if next_steps:
-        lines += ["", "## Next steps"]
-        for step in next_steps:
-            lines.append(f"- {step}")
 
 
 def role_prompt(
@@ -369,13 +173,7 @@ def role_prompt(
     phase: str | None = None,
     base: Path | None = None,
 ) -> str:
-    """Build and return a paste-ready role-prompt string.
-
-    Includes role, agent hint, model tier hint, work mode with discipline bullets,
-    and current objective/next-steps from handoff state (if present).
-
-    Raises ValueError for unknown roles or phases.
-    """
+    """Build and return a paste-ready role-prompt string."""
     from .handoff import read_state
 
     project = load_project(project_id, base=base)
@@ -383,40 +181,18 @@ def role_prompt(
         role, phase=phase, project_id=project_id, base=base
     )
     state = read_state(base)
-
-    lines: list[str] = [
-        f"# Role prompt — {role} / {project_id}",
-        "",
-        f"**Role:** {role}",
-        f"**Agent:** {routing['agent']}",
-        f"**Model tier:** {routing['model_tier']}",
-        f"**Work mode:** {routing['work_mode']} — {routing['work_mode_description']}",
-    ]
-    if phase:
-        lines.append(f"**Phase:** {phase}")
-    _append_project_context(lines, project, project_id)
-    _append_workflow_context(lines, project, role)
-    role_notes = _role_notes(project, role)
-    if role_notes:
-        lines += ["", "## Role notes", role_notes]
-    lines += ["", "## Context discipline"]
-    for bullet in routing["context_discipline"]:
-        lines.append(f"- {bullet}")
-    lines += ["", "## Tool discipline"]
-    for bullet in routing["tool_discipline"]:
-        lines.append(f"- {bullet}")
-
-    if state:
-        _append_handoff_state_context(lines, state, project_id)
-
-    return "\n".join(lines) + "\n"
+    return build_role_prompt(
+        project_id=project_id,
+        role=role,
+        phase=phase,
+        project=project,
+        routing=routing,
+        state=state,
+    )
 
 
 def pickup(project_id: str | None = None, base: Path | None = None) -> str:
-    """Return a paste-ready pickup prompt derived from current handoff state.
-
-    Raises FileNotFoundError if no handoff state exists; ValueError if state is invalid.
-    """
+    """Return a paste-ready pickup prompt derived from current handoff state."""
     from .handoff import read_state
 
     state = read_state(base)

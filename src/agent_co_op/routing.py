@@ -143,7 +143,7 @@ def resolve_routing(
     }
 
     if project_id is not None:
-        from .projects import load_project
+        from .project_store import load_project
 
         project = load_project(project_id, base=base)
         routing = _apply_project_role_overrides(routing, project, role)
