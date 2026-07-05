@@ -57,10 +57,11 @@ def resource_handoff_current() -> str:
 @mcp.resource("handoff://state", mime_type="application/json")
 def resource_handoff_state() -> str:
     """Full handoff-state.json contents."""
-    state = require_resource(
-        _handoff.read_state(base=resolve_workspace_base("")),
-        "No handoff state.",
-    )
+    try:
+        state = _handoff.read_state(base=resolve_workspace_base(""))
+    except ValueError as exc:
+        raise ResourceError(str(exc)) from exc
+    state = require_resource(state, "No handoff state.")
     return dumps_json(state)
 
 
@@ -184,6 +185,7 @@ def handoff_clear(workspace_path: str = "") -> str:
 
 
 @mcp.tool()
+@raise_tool_errors(ValueError)
 def handoff_status(workspace_path: str = "") -> str:
     """Return the current handoff state as JSON."""
     return dumps_json(
@@ -218,7 +220,7 @@ def handoff_restore(entry_id: str, workspace_path: str = "") -> str:
 
 
 @mcp.tool()
-@raise_tool_errors(FileNotFoundError)
+@raise_tool_errors(FileNotFoundError, ValueError)
 def project_show(project_id: str, workspace_path: str = "") -> str:
     """Show project manifest metadata and configured roles."""
     base = resolve_workspace_base(workspace_path)
@@ -226,7 +228,7 @@ def project_show(project_id: str, workspace_path: str = "") -> str:
 
 
 @mcp.tool()
-@raise_tool_errors(FileExistsError, OSError)
+@raise_tool_errors(FileExistsError, OSError, ValueError)
 def project_init(
     project_id: str,
     name: str = "",

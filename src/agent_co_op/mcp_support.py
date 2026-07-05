@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import functools
+import inspect
 import json
 import os
 from collections.abc import Callable
@@ -71,14 +73,14 @@ def raise_tool_errors(
     """Decorator that converts expected domain errors into ToolError."""
 
     def decorator(func: Callable[..., T]) -> Callable[..., T]:
+        @functools.wraps(func)
         def wrapper(*args: Any, **kwargs: Any) -> T:
             try:
                 return func(*args, **kwargs)
             except errors as exc:
                 raise ToolError(str(exc)) from exc
 
-        wrapper.__name__ = func.__name__
-        wrapper.__doc__ = func.__doc__
+        wrapper.__signature__ = inspect.signature(func)
         return wrapper
 
     return decorator
