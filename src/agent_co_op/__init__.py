@@ -5,6 +5,7 @@ Core modules:
     projects — manifests, workspace init, pickup and role prompts
     project_store — manifest load/find without routing dependencies
     prompt_builder — paste-ready role prompt markdown assembly
+    mcp_support — MCP workspace resolution and error helpers
     routing — roles, phases, work modes (see ``defaults.json``)
     verification — verification queue load, run, and reports
     manifest — project manifest JSON Schema validation
