@@ -89,13 +89,12 @@ def write_queue(queue: dict[str, Any], base: Path | None = None) -> Path:
     return path
 
 
-def queue_from_profile(
+def _load_profile(
     project_id: str,
-    profile_id: str = "default",
+    profile_id: str,
     *,
     base: Path | None = None,
 ) -> dict[str, Any]:
-    """Build a verification queue from a project manifest profile."""
     project = load_project(project_id, base=base)
     if project is None:
         raise FileNotFoundError(
@@ -117,7 +116,14 @@ def queue_from_profile(
     profile = profiles[profile_id]
     if not isinstance(profile, dict):
         raise VerificationError(f"Profile {profile_id!r} is invalid.")
+    return profile
 
+
+def _assemble_queue(
+    project_id: str,
+    profile_id: str,
+    profile: dict[str, Any],
+) -> dict[str, Any]:
     queue: dict[str, Any] = {
         "version": "1.0",
         "profile_id": profile_id,
@@ -130,12 +136,25 @@ def queue_from_profile(
     manual_checks = profile.get("manual_checks")
     if isinstance(manual_checks, list) and manual_checks:
         queue["manual_checks"] = manual_checks
+    return queue
 
+
+def _validate_queue_or_raise(queue: dict[str, Any], *, prefix: str) -> None:
     report = validate_queue_data(queue)
     if not report["valid"]:
-        raise VerificationError(
-            "Profile produced invalid queue: " + "; ".join(report["errors"])
-        )
+        raise VerificationError(prefix + "; ".join(report["errors"]))
+
+
+def queue_from_profile(
+    project_id: str,
+    profile_id: str = "default",
+    *,
+    base: Path | None = None,
+) -> dict[str, Any]:
+    """Build a verification queue from a project manifest profile."""
+    profile = _load_profile(project_id, profile_id, base=base)
+    queue = _assemble_queue(project_id, profile_id, profile)
+    _validate_queue_or_raise(queue, prefix="Profile produced invalid queue: ")
     return queue
 
 
@@ -206,59 +225,82 @@ def _run_command(
     }
 
 
-def run_verification(
+def _resolve_run_queue(
     *,
-    profile_id: str | None = None,
-    project_id: str | None = None,
-    stop_on_failure: bool = True,
-    base: Path | None = None,
+    profile_id: str | None,
+    project_id: str | None,
+    base: Path | None,
 ) -> dict[str, Any]:
-    """Execute verification queue commands and write reports."""
-    root = base or Path.cwd()
-    queue: dict[str, Any] | None
     if profile_id and project_id:
         queue = queue_from_profile(project_id, profile_id, base=base)
         write_queue(queue, base=base)
-    else:
-        queue = load_queue(base)
-
+        return queue
+    queue = load_queue(base)
     if queue is None:
         raise FileNotFoundError(
             "No verification queue found. Run "
             "'agent-co-op handoff publish-for-verifier' or create "
             ".agent-co-op/verification-queue.json first."
         )
+    return queue
 
-    started_at = datetime.now(timezone.utc).isoformat()
+
+def _parse_queue_command(cmd: Any) -> dict[str, Any] | None:
+    if not isinstance(cmd, dict):
+        return None
+    cmd_id = str(cmd.get("id", "unknown"))
+    timeout_raw = cmd.get("timeout")
+    return {
+        "id": cmd_id,
+        "label": str(cmd.get("label", cmd_id)),
+        "command": str(cmd.get("command", "")),
+        "timeout": timeout_raw if isinstance(timeout_raw, int) else None,
+    }
+
+
+def _execute_queue_commands(
+    queue: dict[str, Any],
+    *,
+    cwd: Path,
+    stop_on_failure: bool,
+) -> tuple[str, list[dict[str, Any]]]:
     results: list[dict[str, Any]] = []
     overall = "PASS"
-
     for cmd in queue.get("commands", []):
-        if not isinstance(cmd, dict):
+        parsed = _parse_queue_command(cmd)
+        if parsed is None:
             continue
-        cmd_id = str(cmd.get("id", "unknown"))
-        label = str(cmd.get("label", cmd_id))
-        command = str(cmd.get("command", ""))
-        timeout_raw = cmd.get("timeout")
-        timeout = timeout_raw if isinstance(timeout_raw, int) else None
-
-        outcome = _run_command(command, cwd=root, timeout=timeout)
-        entry = {
-            "id": cmd_id,
-            "label": label,
-            "command": command,
-            **outcome,
-        }
-        results.append(entry)
+        outcome = _run_command(
+            parsed["command"],
+            cwd=cwd,
+            timeout=parsed["timeout"],
+        )
+        results.append(
+            {
+                "id": parsed["id"],
+                "label": parsed["label"],
+                "command": parsed["command"],
+                **outcome,
+            }
+        )
         if outcome["status"] == "FAIL" and overall == "PASS":
             overall = "FAIL"
             if stop_on_failure:
                 break
+    return overall, results
 
-    finished_at = datetime.now(timezone.utc).isoformat()
+
+def _build_verification_summary(
+    queue: dict[str, Any],
+    *,
+    overall: str,
+    results: list[dict[str, Any]],
+    started_at: str,
+    finished_at: str,
+    base: Path | None,
+) -> dict[str, Any]:
     manual_checks = queue.get("manual_checks", [])
-
-    summary: dict[str, Any] = {
+    return {
         "overall": overall,
         "profile_id": queue.get("profile_id"),
         "project_id": queue.get("project_id"),
@@ -273,6 +315,36 @@ def run_verification(
         },
     }
 
+
+def run_verification(
+    *,
+    profile_id: str | None = None,
+    project_id: str | None = None,
+    stop_on_failure: bool = True,
+    base: Path | None = None,
+) -> dict[str, Any]:
+    """Execute verification queue commands and write reports."""
+    root = base or Path.cwd()
+    queue = _resolve_run_queue(
+        profile_id=profile_id,
+        project_id=project_id,
+        base=base,
+    )
+    started_at = datetime.now(timezone.utc).isoformat()
+    overall, results = _execute_queue_commands(
+        queue,
+        cwd=root,
+        stop_on_failure=stop_on_failure,
+    )
+    finished_at = datetime.now(timezone.utc).isoformat()
+    summary = _build_verification_summary(
+        queue,
+        overall=overall,
+        results=results,
+        started_at=started_at,
+        finished_at=finished_at,
+        base=base,
+    )
     _write_reports(summary, base=base)
     return summary
 
