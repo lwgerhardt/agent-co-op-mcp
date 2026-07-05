@@ -3,12 +3,15 @@
 Core modules:
     handoff — publish, update, clear, history, restore under ``.agent-co-op/``
     projects — manifests, workspace init, pickup and role prompts
+    project_store — manifest load/find without routing dependencies
+    prompt_builder — paste-ready role prompt markdown assembly
     routing — roles, phases, work modes (see ``defaults.json``)
     verification — verification queue load, run, and reports
     manifest — project manifest JSON Schema validation
     handoff_context — v1/v2 handoff context parse and render
     git_snapshot — optional git branch/status block in handoff state
     handoff_state — warn-only validation of handoff-state JSON
+    workspace_paths — shared ``.agent-co-op/`` path helpers
 
 Surfaces:
     cli — ``agent-co-op`` shell commands
