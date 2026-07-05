@@ -6,6 +6,8 @@ import json
 from pathlib import Path
 
 import pytest
+from git_helpers import init_git_repo, requires_git
+from mcp.server.fastmcp.exceptions import ResourceError, ToolError
 
 from agent_co_op.mcp_server import (
     handoff_clear,
@@ -13,12 +15,12 @@ from agent_co_op.mcp_server import (
     handoff_status,
     resource_handoff_current,
     resource_handoff_project,
+    resource_handoff_queue,
+    resource_handoff_report,
     resource_handoff_state,
     resource_handoff_status,
 )
 from agent_co_op.projects import init_project
-
-from git_helpers import init_git_repo, requires_git
 
 
 class TestMcpTools:
@@ -45,6 +47,15 @@ class TestMcpTools:
         status = json.loads(handoff_status())
         assert status["has_state"] is False
 
+    def test_pickup_without_handoff_raises_tool_error(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from agent_co_op.mcp_server import handoff_pickup
+
+        monkeypatch.setenv("AGENT_CO_OP_ROOT", str(tmp_path))
+        with pytest.raises(ToolError, match="No handoff state found"):
+            handoff_pickup()
+
 
 class TestMcpResources:
     @requires_git
@@ -62,8 +73,8 @@ class TestMcpResources:
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         monkeypatch.setenv("AGENT_CO_OP_ROOT", str(tmp_path))
-        payload = json.loads(resource_handoff_current())
-        assert payload["error"] == "No active handoff."
+        with pytest.raises(ResourceError, match="No active handoff"):
+            resource_handoff_current()
 
     def test_state_resource(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("AGENT_CO_OP_ROOT", str(tmp_path))
@@ -87,8 +98,8 @@ class TestMcpResources:
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         monkeypatch.setenv("AGENT_CO_OP_ROOT", str(tmp_path))
-        payload = json.loads(resource_handoff_project("missing"))
-        assert "error" in payload
+        with pytest.raises(ResourceError, match="No project manifest found"):
+            resource_handoff_project("missing")
 
     def test_run_verification_tool(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
@@ -112,25 +123,20 @@ class TestMcpResources:
     def test_queue_resource_missing(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        from agent_co_op.mcp_server import resource_handoff_queue
-
         monkeypatch.setenv("AGENT_CO_OP_ROOT", str(tmp_path))
-        payload = json.loads(resource_handoff_queue())
-        assert payload["error"] == "No verification queue found."
+        with pytest.raises(ResourceError, match="No verification queue found"):
+            resource_handoff_queue()
 
     def test_report_resource_missing(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        from agent_co_op.mcp_server import resource_handoff_report
-
         monkeypatch.setenv("AGENT_CO_OP_ROOT", str(tmp_path))
-        payload = json.loads(resource_handoff_report())
-        assert payload["error"] == "No verification report found."
+        with pytest.raises(ResourceError, match="No verification report found"):
+            resource_handoff_report()
 
     def test_report_resource_found(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        from agent_co_op.mcp_server import resource_handoff_report
         from agent_co_op.verification import run_verification, write_queue
 
         monkeypatch.setenv("AGENT_CO_OP_ROOT", str(tmp_path))
@@ -152,7 +158,6 @@ class TestMcpResources:
     ) -> None:
         from agent_co_op.handoff import read_state
         from agent_co_op.mcp_server import handoff_publish_for_verifier
-        from agent_co_op.projects import init_project
 
         monkeypatch.setenv("AGENT_CO_OP_ROOT", str(tmp_path))
         init_project("my-app", base=tmp_path)
