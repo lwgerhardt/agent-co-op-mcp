@@ -25,6 +25,7 @@ def _handoff_dir(base: Path | None = None) -> Path:
 
 
 def _write_handoff_files(state: dict[str, Any], base: Path | None = None) -> None:
+    """Write handoff JSON and markdown via temp files, then atomic replace."""
     from .routing import resolve_routing
 
     routing = resolve_routing(
@@ -330,6 +331,173 @@ def publish(
     _write_handoff_files(state, base=base)
 
 
+def _update_conflict_message(
+    *,
+    next_steps: list[str] | None,
+    append_next_steps: list[str] | None,
+    context: str | dict[str, Any] | None,
+    clear_context: bool,
+    clear_next_steps: bool,
+) -> str | None:
+    if next_steps is not None and append_next_steps is not None:
+        return "Specify either next_steps or append_next_steps, not both."
+    if clear_next_steps and (
+        next_steps is not None or append_next_steps is not None
+    ):
+        return (
+            "clear_next_steps cannot be combined with next_steps or "
+            "append_next_steps."
+        )
+    if context is not None and clear_context:
+        return "Specify either context or clear_context, not both."
+    if append_next_steps is not None and not append_next_steps:
+        return "append_next_steps requires at least one step."
+    return None
+
+
+def _has_update_change(
+    *,
+    objective: str | None,
+    phase: str | None,
+    next_steps: list[str] | None,
+    append_next_steps: list[str] | None,
+    context: str | dict[str, Any] | None,
+    clear_context: bool,
+    clear_next_steps: bool,
+) -> bool:
+    return any(
+        value is not None
+        for value in (
+            objective,
+            phase,
+            next_steps,
+            append_next_steps,
+            context,
+        )
+    ) or clear_context or clear_next_steps
+
+
+def _validate_update_args(
+    *,
+    objective: str | None,
+    phase: str | None,
+    next_steps: list[str] | None,
+    append_next_steps: list[str] | None,
+    context: str | dict[str, Any] | None,
+    clear_context: bool,
+    clear_next_steps: bool,
+) -> None:
+    conflict = _update_conflict_message(
+        next_steps=next_steps,
+        append_next_steps=append_next_steps,
+        context=context,
+        clear_context=clear_context,
+        clear_next_steps=clear_next_steps,
+    )
+    if conflict:
+        raise HandoffUpdateError(conflict)
+    if not _has_update_change(
+        objective=objective,
+        phase=phase,
+        next_steps=next_steps,
+        append_next_steps=append_next_steps,
+        context=context,
+        clear_context=clear_context,
+        clear_next_steps=clear_next_steps,
+    ):
+        raise HandoffUpdateError(
+            "At least one update field is required "
+            "(objective, phase, next_steps, append_next_steps, context, "
+            "clear_context, or clear_next_steps)."
+        )
+
+
+def _apply_phase_update(
+    state: dict[str, Any], phase: str, base: Path | None
+) -> None:
+    from .routing import phase_to_role, resolve_routing
+
+    role = phase_to_role(phase)
+    routing = resolve_routing(
+        role,
+        phase=phase,
+        project_id=state["project_id"],
+        base=base,
+    )
+    state["phase"] = phase
+    state["role"] = role
+    state["work_mode"] = routing["work_mode"]
+
+
+def _apply_next_steps_update(
+    state: dict[str, Any],
+    *,
+    next_steps: list[str] | None,
+    append_next_steps: list[str] | None,
+    clear_next_steps: bool,
+) -> None:
+    if clear_next_steps:
+        state["next_steps"] = []
+    elif next_steps is not None:
+        state["next_steps"] = next_steps
+    elif append_next_steps is not None:
+        existing: list[str] = list(state.get("next_steps", []))
+        existing.extend(append_next_steps)
+        state["next_steps"] = existing
+
+
+def _apply_context_update(
+    state: dict[str, Any],
+    context: str | dict[str, Any] | None,
+    clear_context: bool,
+) -> None:
+    if clear_context:
+        state.pop("context", None)
+        return
+    if context is None:
+        return
+    if isinstance(context, dict):
+        state["context"] = context
+    elif context.strip():
+        state["context"] = context
+    else:
+        state.pop("context", None)
+
+
+def _apply_update_fields(
+    state: dict[str, Any],
+    *,
+    objective: str | None,
+    phase: str | None,
+    next_steps: list[str] | None,
+    append_next_steps: list[str] | None,
+    context: str | dict[str, Any] | None,
+    clear_context: bool,
+    clear_next_steps: bool,
+    base: Path | None,
+) -> None:
+    if objective is not None:
+        state["objective"] = objective
+    if phase is not None:
+        _apply_phase_update(state, phase, base)
+    _apply_next_steps_update(
+        state,
+        next_steps=next_steps,
+        append_next_steps=append_next_steps,
+        clear_next_steps=clear_next_steps,
+    )
+    _apply_context_update(state, context, clear_context)
+
+
+def _finalize_handoff_state(state: dict[str, Any], base: Path | None) -> None:
+    state["updated_at"] = datetime.now(timezone.utc).isoformat()
+    git_snapshot = _capture_git_snapshot(base)
+    if git_snapshot is not None:
+        state["git"] = git_snapshot
+    _warn_state_schema(state)
+    _write_handoff_files(state, base=base)
+
+
 def update(
     *,
     objective: str | None = None,
@@ -347,39 +515,15 @@ def update(
     ``append_next_steps`` adds to the existing list. Raises FileNotFoundError
     when no handoff exists and HandoffUpdateError for invalid requests.
     """
-    from .routing import phase_to_role, resolve_routing
-
-    if next_steps is not None and append_next_steps is not None:
-        raise HandoffUpdateError(
-            "Specify either next_steps or append_next_steps, not both."
-        )
-    if clear_next_steps and (
-        next_steps is not None or append_next_steps is not None
-    ):
-        raise HandoffUpdateError(
-            "clear_next_steps cannot be combined with next_steps or append_next_steps."
-        )
-    if context is not None and clear_context:
-        raise HandoffUpdateError("Specify either context or clear_context, not both.")
-    if append_next_steps is not None and not append_next_steps:
-        raise HandoffUpdateError("append_next_steps requires at least one step.")
-
-    has_change = any(
-        value is not None
-        for value in (
-            objective,
-            phase,
-            next_steps,
-            append_next_steps,
-            context,
-        )
-    ) or clear_context or clear_next_steps
-    if not has_change:
-        raise HandoffUpdateError(
-            "At least one update field is required "
-            "(objective, phase, next_steps, append_next_steps, context, "
-            "clear_context, or clear_next_steps)."
-        )
+    _validate_update_args(
+        objective=objective,
+        phase=phase,
+        next_steps=next_steps,
+        append_next_steps=append_next_steps,
+        context=context,
+        clear_context=clear_context,
+        clear_next_steps=clear_next_steps,
+    )
 
     state = read_state(base)
     if state is None:
@@ -387,47 +531,42 @@ def update(
             "No handoff state found. Run 'agent-co-op handoff publish' first."
         )
 
-    if objective is not None:
-        state["objective"] = objective
-
-    if phase is not None:
-        role = phase_to_role(phase)
-        routing = resolve_routing(
-            role,
-            phase=phase,
-            project_id=state["project_id"],
-            base=base,
-        )
-        state["phase"] = phase
-        state["role"] = role
-        state["work_mode"] = routing["work_mode"]
-
-    if clear_next_steps:
-        state["next_steps"] = []
-    elif next_steps is not None:
-        state["next_steps"] = next_steps
-    elif append_next_steps is not None:
-        existing: list[str] = list(state.get("next_steps", []))
-        existing.extend(append_next_steps)
-        state["next_steps"] = existing
-
-    if clear_context:
-        state.pop("context", None)
-    elif context is not None:
-        if isinstance(context, dict):
-            state["context"] = context
-        elif context.strip():
-            state["context"] = context
-        else:
-            state.pop("context", None)
-
-    state["updated_at"] = datetime.now(timezone.utc).isoformat()
-    git_snapshot = _capture_git_snapshot(base)
-    if git_snapshot is not None:
-        state["git"] = git_snapshot
-    _warn_state_schema(state)
-    _write_handoff_files(state, base=base)
+    _apply_update_fields(
+        state,
+        objective=objective,
+        phase=phase,
+        next_steps=next_steps,
+        append_next_steps=append_next_steps,
+        context=context,
+        clear_context=clear_context,
+        clear_next_steps=clear_next_steps,
+        base=base,
+    )
+    _finalize_handoff_state(state, base)
     return state
+
+
+def _append_rendered_context(lines: list[str], state: dict[str, Any]) -> None:
+    handoff_context = state.get("context")
+    if isinstance(handoff_context, str) and handoff_context.strip():
+        lines += ["", "## Handoff context", handoff_context.strip()]
+    elif isinstance(handoff_context, dict):
+        from .handoff_context import format_context_sections, parse_context
+
+        lines += format_context_sections(parse_context(state))
+
+
+def _append_rendered_timestamps(lines: list[str], state: dict[str, Any]) -> None:
+    lines += [
+        "",
+        f"*Published at {state['published_at']}*",
+    ]
+    updated_at = state.get("updated_at")
+    if updated_at and updated_at != state.get("published_at"):
+        lines.append(f"*Updated at {updated_at}*")
+    restored_at = state.get("restored_at")
+    if isinstance(restored_at, str) and restored_at:
+        lines.append(f"*Restored at {restored_at}*")
 
 
 def _render_handoff_md(state: dict[str, Any], routing: dict[str, Any]) -> str:
@@ -439,13 +578,7 @@ def _render_handoff_md(state: dict[str, Any], routing: dict[str, Any]) -> str:
         f"**Role:** {state['role']}",
         f"**Work mode:** {state['work_mode']} — {routing['work_mode_description']}",
     ]
-    handoff_context = state.get("context")
-    if isinstance(handoff_context, str) and handoff_context.strip():
-        lines += ["", "## Handoff context", handoff_context.strip()]
-    elif isinstance(handoff_context, dict):
-        from .handoff_context import format_context_sections, parse_context
-
-        lines += format_context_sections(parse_context(state))
+    _append_rendered_context(lines, state)
     git_block = state.get("git")
     if isinstance(git_block, dict):
         lines += _format_git_lines(git_block)
@@ -459,16 +592,7 @@ def _render_handoff_md(state: dict[str, Any], routing: dict[str, Any]) -> str:
         lines += ["", "## Next steps"]
         for step in state["next_steps"]:
             lines.append(f"- {step}")
-    lines += [
-        "",
-        f"*Published at {state['published_at']}*",
-    ]
-    updated_at = state.get("updated_at")
-    if updated_at and updated_at != state.get("published_at"):
-        lines.append(f"*Updated at {updated_at}*")
-    restored_at = state.get("restored_at")
-    if isinstance(restored_at, str) and restored_at:
-        lines.append(f"*Restored at {restored_at}*")
+    _append_rendered_timestamps(lines, state)
     return "\n".join(lines) + "\n"
 
 
