@@ -239,12 +239,7 @@ def restore(entry_id: str, base: Path | None = None) -> dict[str, Any]:
         )
 
     raw_state = entry["state"]
-    for field in ("phase", "objective", "project_id"):
-        value = raw_state.get(field)
-        if not isinstance(value, str) or not value.strip():
-            raise ValueError(
-                f"History entry {entry_id!r} is missing required field {field!r}."
-            )
+    _validate_archived_required_fields(raw_state, entry_id)
 
     _archive_current_state(base)
 
@@ -252,21 +247,47 @@ def restore(entry_id: str, base: Path | None = None) -> dict[str, Any]:
     project_id = raw_state["project_id"]
     role = phase_to_role(phase)
     routing = resolve_routing(role, phase=phase, project_id=project_id, base=base)
+    now = datetime.now(timezone.utc).isoformat()
+    state = _build_restored_state(raw_state, entry_id, role, routing, now)
 
+    git_snapshot = _capture_git_snapshot(base)
+    if git_snapshot is not None:
+        state["git"] = git_snapshot
+
+    _write_handoff_files(state, base=base)
+    return state
+
+
+def _validate_archived_required_fields(
+    raw_state: dict[str, Any], entry_id: str
+) -> None:
+    for field in ("phase", "objective", "project_id"):
+        value = raw_state.get(field)
+        if not isinstance(value, str) or not value.strip():
+            raise ValueError(
+                f"History entry {entry_id!r} is missing required field {field!r}."
+            )
+
+
+def _build_restored_state(
+    raw_state: dict[str, Any],
+    entry_id: str,
+    role: str,
+    routing: dict[str, Any],
+    now: str,
+) -> dict[str, Any]:
     next_steps_raw = raw_state.get("next_steps", [])
     next_steps: list[str] = (
         list(next_steps_raw) if isinstance(next_steps_raw, list) else []
     )
-
-    now = datetime.now(timezone.utc).isoformat()
     published_at = raw_state.get("published_at")
     if not isinstance(published_at, str) or not published_at:
         published_at = now
 
     state: dict[str, Any] = {
-        "phase": phase,
+        "phase": raw_state["phase"],
         "objective": raw_state["objective"],
-        "project_id": project_id,
+        "project_id": raw_state["project_id"],
         "role": role,
         "work_mode": routing["work_mode"],
         "next_steps": next_steps,
@@ -279,12 +300,6 @@ def restore(entry_id: str, base: Path | None = None) -> dict[str, Any]:
     context = raw_state.get("context")
     if isinstance(context, str) and context.strip():
         state["context"] = context.strip()
-
-    git_snapshot = _capture_git_snapshot(base)
-    if git_snapshot is not None:
-        state["git"] = git_snapshot
-
-    _write_handoff_files(state, base=base)
     return state
 
 

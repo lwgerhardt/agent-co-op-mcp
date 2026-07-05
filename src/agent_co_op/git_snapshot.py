@@ -59,23 +59,27 @@ def capture_git_snapshot(
     }
 
 
+def _append_git_label(lines: list[str], label: str, value: Any) -> None:
+    if isinstance(value, str) and value:
+        lines.append(f"**{label}:** {value}")
+
+
+def _append_modified_files(lines: list[str], modified: Any) -> None:
+    if not isinstance(modified, list) or not modified:
+        return
+    lines.append("**Modified files:**")
+    paths = [path for path in modified[:10] if isinstance(path, str)]
+    lines.extend(f"- {path}" for path in paths)
+    if len(modified) > 10:
+        lines.append(f"- … and {len(modified) - 10} more")
+
+
 def format_git_section_lines(git: dict[str, Any]) -> list[str]:
     """Render git snapshot metadata as markdown lines."""
     lines = ["", "## Git"]
-    branch = git.get("branch")
-    if isinstance(branch, str) and branch:
-        lines.append(f"**Branch:** {branch}")
-    last_commit = git.get("last_commit")
-    if isinstance(last_commit, str) and last_commit:
-        lines.append(f"**Last commit:** {last_commit}")
+    _append_git_label(lines, "Branch", git.get("branch"))
+    _append_git_label(lines, "Last commit", git.get("last_commit"))
     if git.get("uncommitted"):
         lines.append("**Uncommitted changes:** yes")
-        modified = git.get("modified_files")
-        if isinstance(modified, list) and modified:
-            lines.append("**Modified files:**")
-            for path in modified[:10]:
-                if isinstance(path, str):
-                    lines.append(f"- {path}")
-            if len(modified) > 10:
-                lines.append(f"- … and {len(modified) - 10} more")
+        _append_modified_files(lines, git.get("modified_files"))
     return lines
