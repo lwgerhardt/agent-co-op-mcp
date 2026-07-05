@@ -157,13 +157,14 @@ def project_summary(project_id: str, base: Path | None = None) -> dict[str, Any]
             f"Run 'agent-co-op init {project_id}' first."
         )
     roles = project.get("roles", {})
+    manifest_path = find_manifest_path(project_id, base=base)
     return {
         "id": project.get("id", project_id),
         "name": project.get("name", project_id),
         "description": project.get("description", ""),
         "repository": project.get("repository", ""),
         "roles": sorted(roles.keys()) if isinstance(roles, dict) else [],
-        "manifest_path": str(handoff_dir(base) / f"{project_id}.json"),
+        "manifest_path": str(manifest_path) if manifest_path else "",
     }
 
 
