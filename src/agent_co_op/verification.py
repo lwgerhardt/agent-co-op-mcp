@@ -19,6 +19,11 @@ REPORT_MD_FILENAME = "verification-report.md"
 REPORT_JSON_FILENAME = "verification-report.json"
 SCHEMA_PATH = Path(__file__).parent / "verification-queue.schema.json"
 
+DEFAULT_VERIFIER_NEXT_STEPS = (
+    "Run `agent-co-op verify run` and report PASS/FAIL",
+    "Do not claim tests or CI passed without verification output",
+)
+
 
 class VerificationError(ValueError):
     """Raised when verification input or execution fails."""
@@ -119,16 +124,24 @@ def _assemble_queue(
     project_id: str,
     profile_id: str,
     profile: dict[str, Any],
+    *,
+    base: Path | None = None,
 ) -> dict[str, Any]:
+    from .git_snapshot import current_branch
+
     queue: dict[str, Any] = {
         "version": "1.0",
         "profile_id": profile_id,
         "project_id": project_id,
         "commands": profile.get("commands", []),
     }
-    expected_branch = profile.get("expected_branch")
-    if isinstance(expected_branch, str) and expected_branch:
-        queue["expected_branch"] = expected_branch
+    branch = current_branch(base)
+    if branch:
+        queue["expected_branch"] = branch
+    else:
+        expected_branch = profile.get("expected_branch")
+        if isinstance(expected_branch, str) and expected_branch:
+            queue["expected_branch"] = expected_branch
     manual_checks = profile.get("manual_checks")
     if isinstance(manual_checks, list) and manual_checks:
         queue["manual_checks"] = manual_checks
@@ -149,7 +162,7 @@ def queue_from_profile(
 ) -> dict[str, Any]:
     """Build a verification queue from a project manifest profile."""
     profile = _load_profile(project_id, profile_id, base=base)
-    queue = _assemble_queue(project_id, profile_id, profile)
+    queue = _assemble_queue(project_id, profile_id, profile, base=base)
     _validate_queue_or_raise(queue, prefix="Profile produced invalid queue: ")
     return queue
 
@@ -167,16 +180,26 @@ def publish_for_verifier(
     from .handoff import publish
 
     queue = queue_from_profile(project_id, profile_id, base=base)
+    write_queue(queue, base=base)
+    verifier_steps = (
+        list(next_steps) if next_steps else list(DEFAULT_VERIFIER_NEXT_STEPS)
+    )
     publish(
         objective,
         "implement",
         project_id,
-        next_steps=next_steps,
+        next_steps=verifier_steps,
         context=context,
         base=base,
     )
-    write_queue(queue, base=base)
     return queue
+
+
+def clear_artifacts(base: Path | None = None) -> None:
+    """Remove verification queue and report files from .agent-co-op/."""
+    for path in (queue_path(base), report_md_path(base), report_json_path(base)):
+        if path.exists():
+            path.unlink()
 
 
 def _run_command(

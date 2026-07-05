@@ -120,7 +120,7 @@ def cmd_handoff_update(args: argparse.Namespace) -> int:
 def cmd_handoff_clear(args: argparse.Namespace) -> int:
     """Remove all handoff files under ``.agent-co-op/``."""
     handoff.clear()
-    print("Handoff files cleared.")
+    print("Handoff and verification files cleared.")
     return EXIT_SUCCESS
 
 

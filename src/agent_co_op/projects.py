@@ -194,7 +194,8 @@ def role_prompt(
 
 def pickup(project_id: str | None = None, base: Path | None = None) -> str:
     """Return a paste-ready pickup prompt derived from current handoff state."""
-    from .handoff import read_state
+    from .handoff import read_current_handoff, read_state
+    from .handoff.render import render_handoff_md
 
     state = read_state(base)
     if state is None:
@@ -203,7 +204,19 @@ def pickup(project_id: str | None = None, base: Path | None = None) -> str:
         )
 
     pid = project_id or state.get("project_id", "unknown")
-    phase = state.get("phase", "resume")
-    role = state.get("role") or phase_to_role(phase)
+    if project_id and project_id != state.get("project_id"):
+        phase = state.get("phase", "resume")
+        role = state.get("role") or phase_to_role(phase)
+        return role_prompt(pid, role, phase=phase, base=base)
 
-    return role_prompt(pid, role, phase=phase, base=base)
+    content = read_current_handoff(base)
+    if content:
+        return content
+
+    routing = resolve_routing(
+        state["role"],
+        phase=state["phase"],
+        project_id=state["project_id"],
+        base=base,
+    )
+    return render_handoff_md(state, routing, base=base)
