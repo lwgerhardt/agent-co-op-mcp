@@ -181,7 +181,7 @@ def handoff_update(
 def handoff_clear(workspace_path: str = "") -> str:
     """Clear all handoff files from .agent-co-op/."""
     _handoff.clear(base=resolve_workspace_base(workspace_path))
-    return "Handoff files cleared."
+    return "Handoff and verification files cleared."
 
 
 @mcp.tool()

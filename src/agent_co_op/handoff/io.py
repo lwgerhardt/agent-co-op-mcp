@@ -35,12 +35,15 @@ def read_current_handoff(base: Path | None = None) -> str | None:
 
 
 def clear(base: Path | None = None) -> None:
-    """Remove all handoff files from .agent-co-op/."""
+    """Remove handoff and verification artifact files from .agent-co-op/."""
+    from ..verification import clear_artifacts
+
     root = handoff_dir(base)
     for name in ("handoff-state.json", "handoff.md", "CURRENT_HANDOFF.md"):
         path = root / name
         if path.exists():
             path.unlink()
+    clear_artifacts(base)
 
 
 def write_handoff_files(state: dict[str, Any], base: Path | None = None) -> None:
@@ -55,7 +58,7 @@ def write_handoff_files(state: dict[str, Any], base: Path | None = None) -> None
     )
     root = handoff_dir(base)
     root.mkdir(parents=True, exist_ok=True)
-    summary_md = render_handoff_md(state, routing)
+    summary_md = render_handoff_md(state, routing, base=base)
 
     tmp_state = ""
     tmp_handoff_md = ""

@@ -7,13 +7,16 @@ from pathlib import Path
 
 import pytest
 
+from agent_co_op.handoff import clear, read_current_handoff, read_state
 from agent_co_op.projects import init_project
 from agent_co_op.verification import (
+    DEFAULT_VERIFIER_NEXT_STEPS,
     VerificationError,
     publish_for_verifier,
     queue_from_profile,
     queue_path,
     report_json_path,
+    report_md_path,
     run_verification,
     validate_queue_data,
     verification_report,
@@ -119,3 +122,77 @@ class TestVerificationQueue:
         init_project("my-app", base=tmp_path)
         with pytest.raises(VerificationError):
             queue_from_profile("my-app", base=tmp_path)
+
+    def test_publish_for_verifier_e2e_pass(self, tmp_path: Path) -> None:
+        init_project("my-app", base=tmp_path)
+        manifest_path = tmp_path / ".agent-co-op" / "my-app.json"
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        manifest["verification"] = {
+            "profiles": {
+                "default": {
+                    "commands": [{"id": "ok", "label": "Pass", "command": "true"}]
+                }
+            }
+        }
+        manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+        publish_for_verifier("Build auth", "my-app", base=tmp_path)
+        summary = run_verification(base=tmp_path)
+        assert summary["overall"] == "PASS"
+
+        content = read_current_handoff(tmp_path)
+        assert content is not None
+        assert "Verifier owns test execution" in content
+        assert "planner must not claim gates passed" in content
+
+        state = read_state(tmp_path)
+        assert state is not None
+        assert state["phase"] == "implement"
+        assert state["next_steps"] == list(DEFAULT_VERIFIER_NEXT_STEPS)
+
+    def test_publish_for_verifier_respects_custom_next_steps(self, tmp_path: Path) -> None:
+        init_project("my-app", base=tmp_path)
+        manifest_path = tmp_path / ".agent-co-op" / "my-app.json"
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        manifest["verification"] = {
+            "profiles": {
+                "default": {
+                    "commands": [{"id": "ok", "label": "Pass", "command": "true"}]
+                }
+            }
+        }
+        manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+        publish_for_verifier(
+            "Build auth",
+            "my-app",
+            next_steps=["Custom verify step"],
+            base=tmp_path,
+        )
+        state = read_state(tmp_path)
+        assert state is not None
+        assert state["next_steps"] == ["Custom verify step"]
+
+    def test_clear_removes_verification_artifacts(self, tmp_path: Path) -> None:
+        init_project("my-app", base=tmp_path)
+        manifest_path = tmp_path / ".agent-co-op" / "my-app.json"
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        manifest["verification"] = {
+            "profiles": {
+                "default": {
+                    "commands": [{"id": "ok", "label": "Pass", "command": "true"}]
+                }
+            }
+        }
+        manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+        publish_for_verifier("Build auth", "my-app", base=tmp_path)
+        run_verification(base=tmp_path)
+        assert queue_path(tmp_path).exists()
+        assert report_json_path(tmp_path).exists()
+        assert report_md_path(tmp_path).exists()
+
+        clear(tmp_path)
+        assert not queue_path(tmp_path).exists()
+        assert not report_json_path(tmp_path).exists()
+        assert not report_md_path(tmp_path).exists()
