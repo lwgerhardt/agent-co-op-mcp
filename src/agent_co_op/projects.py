@@ -245,6 +245,32 @@ def _format_read_map_entry(entry: Any) -> str | None:
     return None
 
 
+def _nonempty_str(value: Any) -> str | None:
+    if isinstance(value, str) and value.strip():
+        return value.strip()
+    return None
+
+
+def _append_bullet_section(lines: list[str], title: str, items: list[str]) -> None:
+    if not items:
+        return
+    lines += ["", f"## {title}"]
+    lines.extend(f"- {item}" for item in items)
+
+
+def _append_labeled_section(
+    lines: list[str],
+    title: str,
+    fields: list[tuple[str, str | None]],
+) -> None:
+    section = [
+        f"**{label}:** {value}" for label, value in fields if value is not None
+    ]
+    if not section:
+        return
+    lines += ["", f"## {title}", *section]
+
+
 def _append_project_context(
     lines: list[str],
     project: dict[str, Any] | None,
@@ -252,28 +278,17 @@ def _append_project_context(
 ) -> None:
     if project is None:
         return
-    section: list[str] = []
-    name = project.get("name") or project.get("title")
-    if isinstance(name, str) and name.strip():
-        section.append(f"**Name:** {name}")
-    description = project.get("description")
-    if isinstance(description, str) and description.strip():
-        section.append(f"**Description:** {description}")
-    repository = project.get("repository")
-    if isinstance(repository, str) and repository.strip():
-        section.append(f"**Repository:** {repository}")
-    status = project.get("status")
-    if isinstance(status, str) and status.strip():
-        section.append(f"**Status:** {status}")
-    branch = project.get("branch")
-    if isinstance(branch, str) and branch.strip():
-        section.append(f"**Branch:** {branch}")
-    verification_profile = project.get("verification_profile")
-    if isinstance(verification_profile, str) and verification_profile.strip():
-        section.append(f"**Verification profile:** {verification_profile}")
-    if not section:
-        section.append(f"**ID:** {project_id}")
-    lines += ["", "## Project", *section]
+    fields = [
+        ("Name", _nonempty_str(project.get("name")) or _nonempty_str(project.get("title"))),
+        ("Description", _nonempty_str(project.get("description"))),
+        ("Repository", _nonempty_str(project.get("repository"))),
+        ("Status", _nonempty_str(project.get("status"))),
+        ("Branch", _nonempty_str(project.get("branch"))),
+        ("Verification profile", _nonempty_str(project.get("verification_profile"))),
+    ]
+    if not any(value for _, value in fields):
+        fields = [("ID", project_id)]
+    _append_labeled_section(lines, "Project", fields)
 
 
 def _append_workflow_context(
@@ -286,9 +301,7 @@ def _append_workflow_context(
 
     bootstrap = _normalize_bootstrap_commands(project.get("bootstrap"))
     if bootstrap:
-        lines += ["", "## Bootstrap"]
-        for command in bootstrap:
-            lines.append(f"- `{command}`")
+        _append_bullet_section(lines, "Bootstrap", [f"`{command}`" for command in bootstrap])
 
     read_map = project.get("read_map")
     if isinstance(read_map, list):
@@ -297,20 +310,57 @@ def _append_workflow_context(
             for item in read_map
             if (formatted := _format_read_map_entry(item)) is not None
         ]
-        if entries:
-            lines += ["", "## Files to read"]
-            for entry in entries:
-                lines.append(f"- {entry}")
+        _append_bullet_section(lines, "Files to read", entries)
 
-    if role == "planner":
-        planner_notes = project.get("planner_notes")
-        if isinstance(planner_notes, str) and planner_notes.strip():
-            lines += ["", "## Planner notes", planner_notes.strip()]
+    role_notes = {
+        "planner": _nonempty_str(project.get("planner_notes")),
+        "verifier": _nonempty_str(project.get("verifier_notes")),
+    }
+    notes = role_notes.get(role)
+    if notes:
+        lines += ["", f"## {role.title()} notes", notes]
 
-    if role == "verifier":
-        verifier_notes = project.get("verifier_notes")
-        if isinstance(verifier_notes, str) and verifier_notes.strip():
-            lines += ["", "## Verifier notes", verifier_notes.strip()]
+
+def _append_handoff_state_context(
+    lines: list[str],
+    state: dict[str, Any],
+    project_id: str,
+) -> None:
+    if state.get("project_id") != project_id:
+        active_project = state.get("project_id", "unknown")
+        lines += [
+            "",
+            "## Note",
+            (
+                f"Handoff state exists for a different project ({active_project!r}). "
+                "Run 'agent-co-op handoff clear' to reset, or "
+                "'agent-co-op handoff history' to inspect."
+            ),
+        ]
+        return
+
+    lines += [
+        "",
+        "## Current objective",
+        state.get("objective", "(none)"),
+    ]
+    handoff_context = state.get("context")
+    if isinstance(handoff_context, str) and handoff_context.strip():
+        lines += ["", "## Handoff context", handoff_context.strip()]
+    elif isinstance(handoff_context, dict):
+        from .handoff_context import format_context_sections, parse_context
+
+        lines += format_context_sections(parse_context(state))
+    git_block = state.get("git")
+    if isinstance(git_block, dict):
+        from .git_snapshot import format_git_section_lines
+
+        lines += format_git_section_lines(git_block)
+    next_steps: list[str] = state.get("next_steps", [])
+    if next_steps:
+        lines += ["", "## Next steps"]
+        for step in next_steps:
+            lines.append(f"- {step}")
 
 
 def role_prompt(
@@ -356,40 +406,8 @@ def role_prompt(
     for bullet in routing["tool_discipline"]:
         lines.append(f"- {bullet}")
 
-    if state and state.get("project_id") == project_id:
-        lines += [
-            "",
-            "## Current objective",
-            state.get("objective", "(none)"),
-        ]
-        handoff_context = state.get("context")
-        if isinstance(handoff_context, str) and handoff_context.strip():
-            lines += ["", "## Handoff context", handoff_context.strip()]
-        elif isinstance(handoff_context, dict):
-            from .handoff_context import format_context_sections, parse_context
-
-            lines += format_context_sections(parse_context(state))
-        git_block = state.get("git")
-        if isinstance(git_block, dict):
-            from .git_snapshot import format_git_section_lines
-
-            lines += format_git_section_lines(git_block)
-        next_steps: list[str] = state.get("next_steps", [])
-        if next_steps:
-            lines += ["", "## Next steps"]
-            for step in next_steps:
-                lines.append(f"- {step}")
-    elif state:
-        active_project = state.get("project_id", "unknown")
-        lines += [
-            "",
-            "## Note",
-            (
-                f"Handoff state exists for a different project ({active_project!r}). "
-                "Run 'agent-co-op handoff clear' to reset, or "
-                "'agent-co-op handoff history' to inspect."
-            ),
-        ]
+    if state:
+        _append_handoff_state_context(lines, state, project_id)
 
     return "\n".join(lines) + "\n"
 
