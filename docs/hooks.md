@@ -6,7 +6,7 @@ check `.agent-co-op/` before broad discovery.
 Transcripts stay in local IDE directories only — reference handoff paths, never
 transcript content, in rules or hooks.
 
-See also: [README](../README.md), [roadmap](roadmap.md).
+See also: [README](../README.md), [multi-agent workflow](workflow/multi-agent-loop.md), [roadmap](roadmap.md).
 
 ---
 

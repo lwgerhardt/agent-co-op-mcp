@@ -8,6 +8,8 @@ Solo developers using multiple AI coding agents (Cursor, Claude Code, VS Code Co
 
 **agent-co-op** solves this by writing a small **handoff file** (`.agent-co-op/CURRENT_HANDOFF.md`) that any IDE or agent can paste as a prompt to resume work immediately — no re-planning required.
 
+**Multi-agent workflow guide:** [docs/workflow/multi-agent-loop.md](docs/workflow/multi-agent-loop.md) (plan → publish-for-verifier → verify → clear).
+
 ---
 
 ## Quick start
@@ -259,57 +261,49 @@ Written to `.agent-co-op/` in the **user's project directory** (not in this repo
 | `handoff.md` | Human-readable summary | Ignore (via `init`) |
 | `CURRENT_HANDOFF.md` | Published pickup file — paste into any IDE | Ignore (via `init`) |
 | `handoff-history/` | Archived prior handoff states (JSON + markdown) | Ignore (via `init`) |
+| `verification-queue.json` | Verifier command queue (from profile) | Ignore (via `init`) |
+| `verification-report.json` | Machine-readable verify results | Ignore (via `init`) |
+| `verification-report.md` | Human-readable verify results | Ignore (via `init`) |
 
 ---
 
 ## Example workflow
 
+See [docs/workflow/multi-agent-loop.md](docs/workflow/multi-agent-loop.md) for the full
+planner → verifier loop. Short version:
+
 ```bash
 # 0. First-time setup in your repo
 agent-co-op init my-saas --name "My SaaS App"
 
-# 1. Start planning
+# 1. Plan (planner IDE)
 agent-co-op handoff publish \
   --objective "Design the JWT auth system" \
   --phase plan \
   --project my-saas
 
-# 2. Switch to Claude Code — paste the pickup prompt
+# 2. Switch IDE — paste pickup (returns CURRENT_HANDOFF.md)
 agent-co-op pickup
-# → Role: planner | Work mode: think | Project: My SaaS App | ...
 
-# 3. Planning done — hand off to implementation
-agent-co-op handoff publish \
+# 3. Implementation done — hand off to verifier (writes queue + implement handoff)
+agent-co-op handoff publish-for-verifier \
   --objective "Implement JWT auth" \
-  --phase implement \
   --project my-saas \
-  --next-steps "Write middleware" "Write tests" "Update docs"
+  --profile default
 
-# 4. Open Cursor — paste the pickup prompt
+# 4. Verifier IDE — resume and run checks
 agent-co-op pickup
-# → Role: verifier | Work mode: background | Next steps: ...
+agent-co-op verify run
+agent-co-op verify report --json
 
-# 5. Check state without generating a full prompt
-agent-co-op handoff status
-
-# 5b. Mark a next step done and add a follow-up without republishing
-agent-co-op handoff update --next-steps "Deploy to staging" "Monitor logs"
+# 5. Patch progress without republishing
 agent-co-op handoff update --context "JWT middleware merged; refresh flow still TODO"
 
-# 5c. Review prior handoffs after republishing
+# 6. Inspect or roll back prior handoffs
 agent-co-op handoff history
-agent-co-op handoff history --limit 3 --json
-
-# 5d. Roll back to a prior handoff without losing the current state
 agent-co-op handoff restore --id 20260702T060000Z_plan
 
-# 6. Implementation done — verify
-agent-co-op handoff publish \
-  --objective "Verify JWT auth end-to-end" \
-  --phase verify \
-  --project my-saas
-
-# 7. All done — clear
+# 7. Merged — clear handoff and verification artifacts
 agent-co-op handoff clear
 ```
 
@@ -345,6 +339,9 @@ examples/
   handoff-state.example.json
   CURRENT_HANDOFF.example.md
 docs/
+  workflow/
+    README.md
+    multi-agent-loop.md
   roadmap.md
   hooks.md
 .cursor/skills/agent-handoff/

@@ -29,6 +29,9 @@ Load this skill when:
 | `handoff_role_prompt` | Scaffold / planner / verifier / resume prompts |
 | `routing_show` | Role, work mode, agent hints for current project |
 | `handoff_history` / `handoff_restore` | Inspect or roll back prior handoffs |
+| `handoff_publish_for_verifier` | Planner end: implement handoff + verification queue |
+| `handoff_run_verification` | Verifier: run queue; return PASS/FAIL JSON |
+| `handoff_verification_report` | Read last verification report paths + summary |
 
 ## CLI equivalents
 
@@ -36,13 +39,18 @@ Load this skill when:
 agent-co-op handoff status [--json]
 agent-co-op pickup
 agent-co-op handoff publish --objective "…" --phase plan|implement|verify|resume --project <id> [--next-steps …] [--context TEXT]
+agent-co-op handoff publish-for-verifier --objective "…" --project <id> [--profile default] [--next-steps …]
 agent-co-op handoff update [--objective …] [--phase …] [--next-steps …] [--append-next-steps …] [--context …]
 agent-co-op handoff clear
+agent-co-op verify run [--json] [--profile ID --project ID]
+agent-co-op verify report [--json]
 agent-co-op role-prompt <id> --role scaffold|planner|verifier|efficiency|resume [--phase …]
 agent-co-op routing show <id> [--phase …]
 agent-co-op handoff history [--limit N] [--json]
 agent-co-op handoff restore --id <entry_id>
 ```
+
+Full loop: `docs/workflow/multi-agent-loop.md`
 
 ---
 
@@ -51,9 +59,9 @@ agent-co-op handoff restore --id <entry_id>
 1. Call `handoff_status` or read `.agent-co-op/CURRENT_HANDOFF.md`.
 2. If no active handoff → ask for objective or run `handoff_publish`.
 3. Read **phase** from state:
-   - `plan` / `resume` → bootstrap from handoff context before broad file reads.
+   - `plan` / `resume` → run `## Bootstrap` commands in `CURRENT_HANDOFF.md` before broad file reads.
    - `implement` → verifier posture; do not re-implement from scratch.
-   - `verify` → run validation commands from next_steps only.
+   - `verify` → run `agent-co-op verify run` (or MCP `handoff_run_verification`).
 4. Run `git status` and `git diff` on the working branch.
 5. Execute `next_steps` in order; use `handoff_update` to mark progress.
 6. On success and merge → `handoff_clear`.
@@ -62,24 +70,24 @@ Use `handoff_pickup` output as the session bootstrap when starting cold in a new
 
 ---
 
-## Workflow B — Planner end-of-session
+## Workflow B — Planner end-of-session (hand off to verifier)
 
 1. Confirm implementation is on a feature branch with work saved as intended.
-2. `handoff_publish` with `--phase implement`, objective, project id, and concrete next_steps
-   (include branch name and any manual checks for the human).
-3. Tell the human: branch name and suggested verifier prompt (`handoff_role_prompt --role verifier`).
-4. **Do not claim tests or CI passed** — that is the verifier's job.
+2. `handoff_publish_for_verifier` / `agent-co-op handoff publish-for-verifier` with
+   objective, project id, and optional `--profile` (writes queue + implement handoff).
+3. Tell the human: branch name and `agent-co-op pickup` for the verifier IDE.
+4. **Do not claim tests or CI passed** — verifier runs `verify run`.
 
 ---
 
 ## Workflow C — Verifier session
 
-1. `handoff_status` + read state; confirm phase is `implement` or `verify`.
-2. Confirm current git branch matches handoff next_steps / context.
-3. Run verification commands listed in next_steps.
-4. Reply with a short PASS/FAIL summary; cite report file paths for full logs.
-5. Remind the human of any open manual checks in context or next_steps.
-6. On PASS → suggest `handoff_publish --phase verify` or `handoff_clear` after merge.
+1. `handoff_status` + read `.agent-co-op/CURRENT_HANDOFF.md`; phase should be `implement` or `verify`.
+2. Confirm git branch matches handoff (fix `branch_mismatch_warning` first).
+3. `handoff_run_verification` / `agent-co-op verify run`.
+4. Read `.agent-co-op/verification-report.md` (or `handoff_verification_report`); reply with PASS/FAIL table only.
+5. Remind the human of `manual_checks` from the report.
+6. On PASS → human merges → `handoff_clear` (also removes queue/reports).
 
 ---
 
@@ -121,7 +129,7 @@ Use `handoff_pickup` output as the session bootstrap when starting cold in a new
 | `verify` | verifier | background | Run checks only |
 | `resume` | resume | background | Continue listed next_steps |
 
-See `docs/roadmap.md` for planned improvements.
+See `docs/workflow/multi-agent-loop.md` and `docs/roadmap.md`.
 
 ---
 
